@@ -40,6 +40,13 @@ The smoke runs only prove plumbing. For example, 30k steps of PPO on the `flat`
 sanity level reach the flag in every episode - but `flat` has no obstacles, and a
 policy that mostly presses right already finishes it.
 
+The one slightly longer run so far: `configs/ppo_grid.yaml` on level `1-1` for
+300k steps (2.3 minutes on an Apple M4, ~2,150 steps/s). Rollout return rose from
+24 to 42 and explained variance from 0.15 to 0.51; a sampled evaluation of the
+final checkpoint over 20 episodes reached mean progress 0.41 and the flag twice
+(random: 0.19, never). That is a learning signal, not a trained agent - the config
+budgets 5M steps.
+
 Reference points from the non-learning baselines (`mario-play eval --agent ...`,
 default reward, seed 10000):
 

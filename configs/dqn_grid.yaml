@@ -55,5 +55,7 @@ dqn:
 eval:
   interval: 100000
   # Deterministic game + greedy policy = the same episode every time: one is enough.
+  # (DQN's behaviour policy is already 95% greedy at eps_end, so greedy evaluation is
+  # representative here; the PPO configs evaluate the sampled policy instead.)
   episodes: 1
   deterministic: true

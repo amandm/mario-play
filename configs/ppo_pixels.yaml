@@ -51,6 +51,11 @@ ppo:
 
 eval:
   interval: 250000
-  # Deterministic game + greedy policy = the same episode every time: one is enough.
-  episodes: 1
-  deterministic: true
+  # Evaluate the SAMPLED policy over a few episodes. The game is deterministic, so a greedy
+  # (argmax) episode is a single repeated trajectory, and early in training the argmax of a
+  # still-uncertain policy is unrepresentative: in a 300k-step smoke run the sampled policy
+  # reached progress 0.41 (flag in 2 of 20 episodes) while its argmax spammed one action into
+  # the first walker (progress 0.07). Sampled evaluation is seeded, reproducible and does not
+  # disturb the training RNG. Switch to deterministic=true, episodes=1 once entropy is low.
+  episodes: 5
+  deterministic: false

@@ -297,3 +297,27 @@ def test_load_algorithm_closes_its_throwaway_env(tiny_cfg, tmp_path, monkeypatch
 def test_load_algorithm_reports_a_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_algorithm(tmp_path / "nope.pt", device="cpu")
+
+
+def test_stochastic_evaluation_is_reproducible_and_leaves_the_global_rng_alone(tiny_cfg):
+    """Sampled (non-greedy) evaluation is a function of `seed` only.
+
+    A periodic stochastic eval inside training must neither depend on, nor advance, the
+    global RNG stream the learner draws from: otherwise the eval interval would change
+    the training run, and two evals of the same checkpoint would disagree.
+    """
+    set_seed(3)
+    algo = build_algo(tiny_cfg("ppo"))
+
+    set_seed(100)
+    first = evaluate(algo, CARTPOLE, episodes=3, seed=7, deterministic=False)
+    after_first = torch.rand(4)
+    set_seed(200)  # a different global RNG state must not change the result
+    second = evaluate(algo, CARTPOLE, episodes=3, seed=7, deterministic=False)
+    assert first == second
+
+    set_seed(100)  # same state as before the first evaluation, but no evaluation this time
+    assert torch.equal(torch.rand(4), after_first)
+
+    other = evaluate(algo, CARTPOLE, episodes=3, seed=8, deterministic=False)
+    assert other != first

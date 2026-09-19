@@ -10,6 +10,7 @@ their scores are comparable over the course of a training run.
 from __future__ import annotations
 
 import copy
+import random
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ from mario_play.rl.algos import get_algorithm
 from mario_play.rl.algos.base import Algorithm
 from mario_play.rl.checkpoint import load_checkpoint
 from mario_play.rl.config import EnvConfig, TrainConfig, config_from_dict
-from mario_play.rl.utils import resolve_device
+from mario_play.rl.utils import get_rng_state, resolve_device, set_rng_state
 
 FrameCallback = Callable[[np.ndarray], None]
 
@@ -55,7 +56,11 @@ def evaluate(
     `render_mode=None` is turned into when a callback is given. `max_steps` cuts
     off episodes of envs that might never end; `None` trusts the env.
 
-    Only `algo.predict` is used, so evaluation never touches training state.
+    Only `algo.predict` is used, so evaluation never touches training state. That
+    includes the global random number generators: a sampled (`deterministic=False`)
+    evaluation runs on its own stream seeded with `seed` and puts the global state
+    back afterwards, so its result depends on `seed` alone and a periodic evaluation
+    does not change the training run around it.
     """
     if episodes < 1:
         raise ValueError(f"episodes must be >= 1, got {episodes}")
@@ -74,6 +79,13 @@ def evaluate(
     flags: list[float] = []
     progress: list[float] = []
 
+    # Greedy prediction draws no random numbers; only the sampled path needs its own stream.
+    rng_state = None if deterministic else get_rng_state()
+    if rng_state is not None:
+        # Not `set_seed`: that would also reset the run's torch determinism flags.
+        random.seed(seed)
+        np.random.seed(seed % 2**32)
+        torch.manual_seed(seed)  # every device
     env = make_env(env_cfg, seed=seed, render_mode=render_mode)
     try:
         for episode in range(episodes):
@@ -101,6 +113,8 @@ def evaluate(
                 progress.append(as_float(info["progress"]))
     finally:
         env.close()
+        if rng_state is not None:
+            set_rng_state(rng_state)
 
     result: dict[str, float | int] = {
         "mean_return": float(np.mean(returns)),

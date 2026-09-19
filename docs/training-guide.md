@@ -267,7 +267,7 @@ lines.
 | Scalar | Healthy | Trouble |
 |---|---|---|
 | `rollout/mean_progress` | The main curve early on: climbs in steps, each plateau is an obstacle the agent has not yet learned to pass. | Flat for millions of steps: see failure modes. A plateau value tells you *where* - watch the agent to see *what*. |
-| `rollout/flag_rate`, `eval/flag_rate` | 0 for a long time, then rising quickly once the last obstacle falls. `eval/flag_rate` is 0 or 1 per level: game and greedy policy are deterministic, so every greedy episode is the same. | `rollout` high but `eval` 0: the greedy policy fails where the sampled one sometimes gets lucky - keep training, or evaluate with `eval.deterministic=false`. |
+| `rollout/flag_rate`, `eval/flag_rate` | 0 for a long time, then rising quickly once the last obstacle falls. With greedy evaluation (`eval.deterministic=true`, the DQN configs) `eval/flag_rate` is 0 or 1 per level, because game and greedy policy are deterministic; the PPO configs evaluate the sampled policy over 5 seeded episodes. | `rollout` high but a greedy `eval` at 0: the argmax fails where the sampled policy often succeeds - keep training, or evaluate with `eval.deterministic=false`. |
 | `rollout/ep_return_mean` | Tracks progress (+1 per tile) minus deaths; reference: random ~20, heuristic ~80, search agent ~234 on `1-1`. | Falling while progress rises: deaths (-15) dominate. |
 | `train/approx_kl` | ~0.003-0.02 per update. | Sustained > 0.03-0.05 or spikes: policy steps too large -> lower `lr`, `n_epochs` or `clip_coef`, set `target_kl`. ~0: nothing is being learned. |
 | `train/clip_frac` | ~0.05-0.25: some samples hit the clip, most do not. | > 0.3: too aggressive (same fixes as KL). ~0 together with KL ~0: learning rate annealed away or advantages vanished. |
@@ -309,9 +309,15 @@ uv run mario-play eval --checkpoint runs/ppo_grid_1-1 --episodes 10 --stochastic
   `total_timesteps` (the last update still runs at `lr / n_updates`); the last
   10% of a run learn little. Plan `total_timesteps` generously or disable
   annealing.
-- **"Evaluation never changes."** One greedy episode on a deterministic level is a
-  single number that moves in jumps. Use `eval.deterministic=false eval.episodes=5`
-  for a smoother signal, or train on several levels.
+- **"Evaluation never changes" / "eval is far below the rollout numbers."** One
+  greedy episode on a deterministic level is a single number that moves in jumps,
+  and the argmax of a still-uncertain policy can be much worse than the policy
+  itself (a 300k-step PPO smoke run on `1-1`: sampled progress 0.41, greedy 0.07).
+  The shipped PPO configs therefore evaluate the sampled policy
+  (`eval.deterministic: false`, `eval.episodes: 5`); sampled evaluation is seeded
+  by `eval.seed`, reproducible, and leaves the training RNG untouched. Switch to
+  `eval.deterministic=true eval.episodes=1` once the entropy is low, or train on
+  several levels.
 - **`best.pt` is missing.** It is written by periodic evaluation; with
   `eval.interval=0` only the final evaluation can write it. Use `latest.pt`.
   After a resume, look for `best.superseded.pt`: a `best.pt` from beyond the
