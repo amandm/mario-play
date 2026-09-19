@@ -1,0 +1,133 @@
+{
+  "description": "Curated research artifact checksums. Local input names identify provenance; original run archives and checkpoint bytes are not bundled.",
+  "public_artifacts": {
+    "experiment-settings.json": {
+      "bytes": 9954,
+      "sha256": "8fc67112b416dcfb1f88f59f2997b121b0a83e0a92c120ef32e179fe49fe47fa"
+    },
+    "export_artifacts.py": {
+      "bytes": 15405,
+      "sha256": "a31173d6ad7e45dc1c428a1ba0e2574f041b3fce150b05d0196fe124f4bbceef"
+    },
+    "mario-episodes.csv": {
+      "bytes": 117249,
+      "sha256": "80cf76248fd30e5b419ab35431939461dcb3c71a8c345d097c96097819c742cd"
+    },
+    "mario-jev-table.json": {
+      "bytes": 977053,
+      "sha256": "17c7a4e845295a77d79c561d665223cc267e87c07e757da85f02199f8d245ca4"
+    },
+    "mario-learning-curve.png": {
+      "bytes": 386500,
+      "sha256": "44ef83829e37b43c0f69842521e45836e11b69f6b084826311ea9c2206c72eba"
+    },
+    "mario-matched-2000000.gif": {
+      "bytes": 5108883,
+      "sha256": "32086828e32f36450941d68cb2fa0b2a6857133361d00e1a6ba7835f415cc7c0"
+    },
+    "mario-milestones.csv": {
+      "bytes": 15884,
+      "sha256": "90e640116250282610c803aa7ebe3e7222337819e1b57ac567f9e3a069347da1"
+    },
+    "source-hashes.json": {
+      "bytes": 13315,
+      "sha256": "cf24af51b61072874df98ca7fe24b5c49ef438f0fb53220e9f72401af73f60f7"
+    },
+    "taxi-episodes.csv": {
+      "bytes": 2309319,
+      "sha256": "0834a9e9054835275ef4ad16d80574376f3715444e6b4450155f3a24374ab49d"
+    },
+    "taxi-feature-diagnostics.json": {
+      "bytes": 1050,
+      "sha256": "6f1578334db0ea24042adc92e26da4d843e71a6637c9834ef5e703ee92f4679c"
+    },
+    "taxi-initial-diagnostic.csv": {
+      "bytes": 2113,
+      "sha256": "a6ff0692c98ff8de464827adef3d756b3898751e041db5e419fddce42ceed0f9"
+    },
+    "taxi-initial-episodes.csv": {
+      "bytes": 498823,
+      "sha256": "accdc0ecc02e149858a41723b6dcd6498b2c6f55b0ab658c4043b4cde48d6525"
+    },
+    "taxi-jev-table.json": {
+      "bytes": 2213441,
+      "sha256": "339d8a4092fe5d7d906bbe8a69f668ec4ee31b58477252116630dee052c5637d"
+    },
+    "taxi-learning-curves.png": {
+      "bytes": 136182,
+      "sha256": "daa7026c96c9c5cd568ee825deabba49aecc5f5bbc5efeb17a81d8e54088ac48"
+    },
+    "taxi-milestones.csv": {
+      "bytes": 18945,
+      "sha256": "16d077c11faeeb2b0f35d35715a75a0f66ff9bc3bb1d775ee3304d2d92e7bd6c"
+    },
+    "taxi-penalty-learning.png": {
+      "bytes": 176254,
+      "sha256": "6d82c880847203a98f7c09613932db7320df65454e1be5e53dd6ccc334207116"
+    },
+    "taxi-start-461.gif": {
+      "bytes": 527147,
+      "sha256": "558820a03a4962086a30b602291499281ffeeffea79d0d49e273e17dbd836d86"
+    }
+  },
+  "records": {
+    "mario_episodes": 1260,
+    "mario_milestones": 60,
+    "taxi_episodes": 45000,
+    "taxi_initial_diagnostic_rows": 15,
+    "taxi_initial_episodes": 4500,
+    "taxi_milestones": 150
+  },
+  "schema_version": 1,
+  "source_artifact_sha256": {
+    "runs/colab/jev-assisted-v2/baseline/milestones.json": "82308b69d8ed3b03b05ec503282c05d5f914d0ccfaf5f6d2f951563cbe0be6dd",
+    "runs/colab/jev-assisted-v2/baseline/progress.json": "91d7b9c1c0069b82665e9de763cfc8883f4752090d9495dbad0fd67bf07e2d6f",
+    "runs/colab/jev-assisted-v2/continuation.json": "d8e6f49160b4621f4c0687ad403588bdf37d89d3080b0c7c04e894beb095a0ae",
+    "runs/colab/jev-assisted-v2/experiment.json": "e68234b5eb9385bd93fdfbafeec863cf6fa9d731c0ce5edb068f6b079f268c9e",
+    "runs/colab/jev-assisted-v2/jev_interval1/milestones.json": "503c9dea1c66805b0d874a4587ff81ced4a11c4bfe6c908a9f30f35669ba78af",
+    "runs/colab/jev-assisted-v2/jev_interval16/milestones.json": "39498a5333a135d972ace8cd91325203408f8f4ad741bbff969346be140aa6bc",
+    "runs/colab/jev-assisted-v2/learning_curve.png": "44ef83829e37b43c0f69842521e45836e11b69f6b084826311ea9c2206c72eba",
+    "runs/colab/jev-assisted-v2/matched_2000000.gif": "32086828e32f36450941d68cb2fa0b2a6857133361d00e1a6ba7835f415cc7c0",
+    "runs/colab/jev-assisted-v2/matched_2000000.json": "7df1e4b0a575d6da2d4eac0effefae81a98d8aaf8c57ebdc6c2c03c3147f8a1e",
+    "runs/colab/jev-assisted-v2/source_manifest.json": "8e2e2a7b605d823c1846f7d78a86262c111fb56a8d0ac6ea5ad347a525a33fc4",
+    "runs/colab/jev-assisted-v2/table.json": "17c7a4e845295a77d79c561d665223cc267e87c07e757da85f02199f8d245ca4",
+    "runs/taxi-jev-v1/experiment.json": "fe7cf74e2c395e26e95f40dedda2e29800e6a416be389fb0672a1d2d05edb503",
+    "runs/taxi-jev-v1/feature_accuracy.json": "1eb657c28d6940bc86f0fc2ba1361e070ba35917057cab35e0768237dfffa405",
+    "runs/taxi-jev-v1/gameplay.json": "85928a2f7fc8bb93fbaa97ccffa574df6c3eab31c63d8ea546ca7c86698a6cd5",
+    "runs/taxi-jev-v1/initial_policy_diagnostic.json": "8eacc1bf423498e0ec35018ff2ac33df9d6f8e9305daff0b81c68d9d86670ad6",
+    "runs/taxi-jev-v1/jev/seed_0/milestones.json": "7698b57ef52e404942b20d4613087be96301a480420ff0d955f2ee042317026c",
+    "runs/taxi-jev-v1/jev/seed_0/result.json": "c5ecff0c29190f3ac61771c5af0a3b0fb368f68ff36f24cd1054d3525e8efc14",
+    "runs/taxi-jev-v1/jev/seed_1/milestones.json": "95f1e22a664590b09680b21351fb9944ca2e87b1c23b3707699c052236ac73b8",
+    "runs/taxi-jev-v1/jev/seed_1/result.json": "c9a6d8e19d4a2417ecb2389b0bf7a89e1dc93a39f626569bb572185172bc37d3",
+    "runs/taxi-jev-v1/jev/seed_2/milestones.json": "b9d9d6e91d7d48b51a19f5561f2fdcae5757f60ec6e26ed5e0c1865df32a2359",
+    "runs/taxi-jev-v1/jev/seed_2/result.json": "1bc505381dddc692ccc19abd1157f79d14862b782ca43bbac0603155748fc623",
+    "runs/taxi-jev-v1/jev/seed_3/milestones.json": "e0cf1caa16805ab0801a1919ab54e231cc8c5101b56eafaa1e9c068bc61675ae",
+    "runs/taxi-jev-v1/jev/seed_3/result.json": "825669b38633e272425c33f5e207544304feae3e86b92c1369e52853a521d296",
+    "runs/taxi-jev-v1/jev/seed_4/milestones.json": "6dff2f65ea8456292184764ed7c2dcbc2b4215a71cf06b6e11a67f8888ad787b",
+    "runs/taxi-jev-v1/jev/seed_4/result.json": "50891c93d186d723cd7a0a7ea5ecb4c56e6a2a3e01fc7bcc7f083048406eef5c",
+    "runs/taxi-jev-v1/learning-curves.png": "daa7026c96c9c5cd568ee825deabba49aecc5f5bbc5efeb17a81d8e54088ac48",
+    "runs/taxi-jev-v1/penalty-learning.png": "6d82c880847203a98f7c09613932db7320df65454e1be5e53dd6ccc334207116",
+    "runs/taxi-jev-v1/rules/seed_0/milestones.json": "b3b48e7e88eb117d91ac562c73462526acb52c0dc713b762c4d806663ccfb5d8",
+    "runs/taxi-jev-v1/rules/seed_0/result.json": "8d00fecdf8e8421932724e607b3b36b0e3fee4b3e3a43aa5af3ac662897695ba",
+    "runs/taxi-jev-v1/rules/seed_1/milestones.json": "3dcc1850a70502d33a50e87546530ce02d0f2cd39c4db48882ca6ebb47beb448",
+    "runs/taxi-jev-v1/rules/seed_1/result.json": "ac69a9f2f85e2e4d8ad2c3416e217dcef5e9ad648944e6680ab8fa290e8b9f14",
+    "runs/taxi-jev-v1/rules/seed_2/milestones.json": "7cad57dea05a4cc8f5ce428f2de612ccfe359b68d4ac1394e31acf397a2092a7",
+    "runs/taxi-jev-v1/rules/seed_2/result.json": "40867fee1aa9f5d9ea42d4b678f1cebdf61151b2a0bc68541ec8fbb4ee52d019",
+    "runs/taxi-jev-v1/rules/seed_3/milestones.json": "43fbe70dbe53f080ec842e5c7f40c28948b49a78f9338b87439a5b836eef81ca",
+    "runs/taxi-jev-v1/rules/seed_3/result.json": "a4b6476edf980f03c7a405f716bd6162892ceaaa49adec6de9cbcc3a50f1a80d",
+    "runs/taxi-jev-v1/rules/seed_4/milestones.json": "52b16e381b960efaf277c02960dcc211cd136c3b3f90f1a2b168aa482ac22f6b",
+    "runs/taxi-jev-v1/rules/seed_4/result.json": "3f250d0454a3dfa4be849276e5def8b857cae5742ffc4477dd96836d5be775fa",
+    "runs/taxi-jev-v1/table.json": "339d8a4092fe5d7d906bbe8a69f668ec4ee31b58477252116630dee052c5637d",
+    "runs/taxi-jev-v1/taxi-start-461.gif": "caa11d4c9e0bf014e0ef4ac1a6728137e5b6af9e93e9f45db3278fd130b3bed9",
+    "runs/taxi-jev-v1/zeros/seed_0/milestones.json": "0825adc6c8feacb79c9fc15594f21e28aa138b081e2f5297aac1264e7e0960a3",
+    "runs/taxi-jev-v1/zeros/seed_0/result.json": "68011f70ef6891a659418ff11dece57cc955677b22f5027341f70e3d86384969",
+    "runs/taxi-jev-v1/zeros/seed_1/milestones.json": "d86268b4d0b19b008c5b5276f6f86ee012ee7e26c13688850c4e62d319ac254e",
+    "runs/taxi-jev-v1/zeros/seed_1/result.json": "8e6d491f141246144dca7bccb2a4d5e2b6c67f336d9f6f460e9ba3c5de90fb54",
+    "runs/taxi-jev-v1/zeros/seed_2/milestones.json": "8e6f84a645b2cb7f83f72006a1c6274ec0d54a7c31c39552ed094035f7ded377",
+    "runs/taxi-jev-v1/zeros/seed_2/result.json": "bd6469d3dc051098eaca8480b5e544584ccba110693658cc333a2bbf295d3b2b",
+    "runs/taxi-jev-v1/zeros/seed_3/milestones.json": "57b76761e6b43779baedf95b1faf611649bfbd24875c0252043994a93ea009e7",
+    "runs/taxi-jev-v1/zeros/seed_3/result.json": "aa793758b3400b794d21fd1eeed9721cadd7397fb767c93b16723c77cde1abdc",
+    "runs/taxi-jev-v1/zeros/seed_4/milestones.json": "307166e298601bf8838566cc90f07ac2156465a7ed2ea5f405e61c0798aad62d",
+    "runs/taxi-jev-v1/zeros/seed_4/result.json": "e5c814316927e9697dcceb8ed77430aa6a7bcbd51c1b8672fba1461dc5c6b77e"
+  }
+}

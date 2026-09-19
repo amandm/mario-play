@@ -199,3 +199,58 @@ def test_exception_saves_partial_step_and_evaluation_restores_rng(tmp_path, monk
         assert progress["status"] == "failed" and progress["global_step"] == 4
     finally:
         trainer.close()
+
+
+def test_fixed_budget_resumes_latest_past_old_crossing_and_counts_actual_updates(
+    tmp_path, monkeypatch
+):
+    script = runner()
+    cfg = config(tmp_path)
+    # Make the first milestone qualify, independently of this tiny plumbing run's ability.
+    monkeypatch.setitem(script["run_experiment"].__globals__, "ready", lambda record: True)
+    first = script["run_experiment"](
+        [cfg],
+        max_steps=36,
+        stage_steps=12,
+        eval_episodes=1,
+        eval_max_steps=3,
+        make_gifs=False,
+    )
+    assert first["conditions"]["baseline"]["global_step"] == 12
+    checkpoint = tmp_path / "baseline/checkpoints/latest.pt"
+    initial = load_checkpoint(checkpoint)
+    assert initial["extra"]["pending_rollout_transitions"] == 12
+    assert initial["algo_state"]["n_updates"] == 0
+    original_initial = (checkpoint.parent / "initial.pt").read_bytes()
+    # An older selected policy must never initialize continuation.
+    (checkpoint.parent / "selected.pt").write_bytes(original_initial)
+    resumed = script["StagedTrainer"](
+        cfg, resume=checkpoint, stage_steps=12, eval_episodes=1, eval_max_steps=3
+    )
+    try:
+        same_state(resumed._rng, initial["rng_state"])
+        assert resumed.global_step == 12
+        assert resumed.discarded_rollout_transitions == 12
+    finally:
+        resumed.close()
+    result = script["run_experiment"](
+        [cfg],
+        max_steps=36,
+        resume=True,
+        fixed_budget=True,
+        stage_steps=12,
+        eval_episodes=1,
+        eval_max_steps=3,
+        make_gifs=False,
+    )
+    snapshot = result["conditions"]["baseline"]
+    assert result["fixed_budget"] and result["stop_reason"] == "fixed_budget"
+    assert snapshot["global_step"] == 36 and snapshot["fixed_lr_horizon"] == 120
+    assert snapshot["ppo_updates"] == 1  # Not floor(36 / 16): 12 transitions were discarded.
+    assert snapshot["pending_rollout_transitions"] == 8
+    assert snapshot["discarded_rollout_transitions"] == 12
+    assert snapshot["process_resume_count"] == 1
+    final = load_checkpoint(checkpoint)
+    assert final["algo_state"]["n_updates"] == final["extra"]["ppo_updates"] == 1
+    assert final["config"]["total_timesteps"] == 120
+    assert (checkpoint.parent / "initial.pt").read_bytes() == original_initial

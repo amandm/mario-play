@@ -2,11 +2,12 @@
 
 Guide for AI and human contributors. mario-play is an original Mario-style
 platformer (pure Python + numpy), a Gymnasium env around it (`MarioPlay-v0`) and a
-from-scratch PyTorch RL framework (PPO + Double DQN). A PPO policy trained on
-Colab has demonstrated completion of level `1-1` at its one-million-step
-checkpoint. The user requested stopping once learning was evident, without
-training to full convergence. Artifacts are in `runs/colab/ppo-agent-v1/`;
-performance on other levels has not been established.
+from-scratch PyTorch RL framework (PPO + Double DQN). PPO policies trained on
+Colab have demonstrated completion of level `1-1`. The user subsequently
+requested matched Jev-assisted PPO comparisons, a longer Mario continuation,
+and a replicated Taxi experiment. Preserve the original learning demonstration
+in `runs/colab/ppo-agent-v1/` and the separate comparison artifacts described
+below. Performance on other platformer levels has not been established.
 
 ## Commands
 
@@ -63,11 +64,11 @@ Training practice: [docs/training-guide.md](docs/training-guide.md).
 
 ## Hard rules
 
-- **Current learning focus: one PPO agent on level `1-1`.** Use Colab for
-  training and explain progress through the agent's behavior, rewards, and
-  completion rate. Do not add algorithm, hardware, or multi-seed comparisons
-  unless the user asks for them. Evidence of learning is sufficient for the
-  user's current goal; do not train to full convergence just to finish a budget.
+- **Learning focus: PPO and understandable training evidence.** Explain
+  progress through behavior, rewards, and task completion. Use Colab for the
+  requested Mario runs and the bounded experiment protocols below. Do not add
+  other algorithms, hardware comparisons, or extra training seeds beyond the
+  user's requested scope. Do not claim that a completed budget proves convergence.
 - **Jev comparison is now requested.** The user explicitly authorized a hosted
   Jev controller and a visual comparison with the saved PPO checkpoint on the
   same game setup. Label Jev as pretrained inference, preserve the PPO weights,
@@ -81,6 +82,15 @@ Training practice: [docs/training-guide.md](docs/training-guide.md).
   refreshes, unique API calls, and wall time separately. Reuse identical cached
   Jev assessments; do not claim cache lookups are new API calls or that more
   advice is guaranteed to improve learning.
+- **Longer Mario and replicated Taxi experiments are now requested.** Preserve
+  the completed Mario pilot and extend each latest one-million-step checkpoint
+  to a fixed two-million-step total, with the original five-million-step
+  learning-rate horizon. Report continuation resets and actual PPO updates.
+  Separately compare Taxi-v4 PPO with zero auxiliary inputs, exact coded
+  features, and Jev estimates of those same features across five paired seeds.
+  Keep observations, action-mask handling, architecture, budgets, and evaluation
+  conditions matched. Freeze the protocol before training, report every seed,
+  and preserve negative or inconclusive results.
 - **No new purchases.** Never purchase compute, top up credits, upgrade, or
   start a paid subscription. The user has authorized their existing Colab Pro
   subscription and its available compute units for requested training jobs.

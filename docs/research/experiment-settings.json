@@ -1,0 +1,270 @@
+{
+  "mario": {
+    "action_space": "7 simple actions; frame skip 4; frame stack 1; stall limit 150",
+    "api": {
+      "model": "jev-1.13.0",
+      "precomputation_requests": 476,
+      "table_sha256": "17c7a4e845295a77d79c561d665223cc267e87c07e757da85f02199f8d245ca4",
+      "training_evaluation_requests": 0
+    },
+    "architecture": "GridEncoder with hidden_size 256; identical initial weights across conditions",
+    "conditions": {
+      "baseline": "Four zero planes",
+      "jev_interval1": "Four frozen Jev probabilities refreshed every decision and on reset",
+      "jev_interval16": "Four frozen Jev probabilities refreshed every 16 decisions and on reset"
+    },
+    "continuation": {
+      "expected_final_ppo_updates_per_condition": 1952,
+      "restart_semantics": "all environments restart; each incomplete 576-transition PPO rollout is discarded",
+      "starting_steps_per_condition": 1000000,
+      "target_steps_per_condition": 2000000
+    },
+    "environment": "MarioPlay-v0, original platform game; level 1-1",
+    "evaluation": "Every 100000 transitions, 20 sampled episodes with seeds 2000000..2000019 and one greedy episode with seed 4000000; maximum 6000 decisions",
+    "initial_model_sha256": "39d7295409e99e354c4163812ca29f6a05b17c67ed99e59c1c6e4a8843382dac",
+    "learning_rate_annealing_horizon": 5000000,
+    "n_envs": 8,
+    "observations": "14 grid planes plus four auxiliary planes; shape 18 x 15 x 16",
+    "playback": {
+      "alignment": "aligned decision index; ended runs hold final frame marked EPISODE ENDED",
+      "deterministic": true,
+      "episodes": {
+        "baseline": {
+          "checkpoint_sha256": "2017c7db9abcb3649746bb01e82f5b5019d06065c2ddf8e1e24feb17ede0f7ba",
+          "completed": true,
+          "decisions": 314
+        },
+        "jev_interval1": {
+          "checkpoint_sha256": "f133060dc52ad67a9e32babb2e9fa761d26d84eed149dae037394206749bc7ee",
+          "completed": true,
+          "decisions": 303
+        },
+        "jev_interval16": {
+          "checkpoint_sha256": "5d8cf8ab6f41a32e1834c0df83a4315294a90852f666d7b9b812e59c27575edb",
+          "completed": true,
+          "decisions": 312
+        }
+      },
+      "fps": 15.0,
+      "frames": 315,
+      "global_step": 2000000,
+      "seed": 4000000
+    },
+    "ppo": {
+      "anneal_lr": true,
+      "clip_coef": 0.2,
+      "clip_vloss": true,
+      "ent_coef": 0.01,
+      "gae_lambda": 0.95,
+      "gamma": 0.99,
+      "lr": 0.00025,
+      "max_grad_norm": 0.5,
+      "n_epochs": 4,
+      "n_minibatches": 4,
+      "n_steps": 128,
+      "norm_adv": true,
+      "target_kl": null,
+      "vf_coef": 0.5
+    },
+    "primary_target": "At least 12/20 sampled completions plus greedy completion at the same evaluated checkpoint",
+    "total_transitions_per_condition": 2000000,
+    "training_seeds": [
+      0
+    ]
+  },
+  "taxi": {
+    "action_mask": "unused in every condition",
+    "api": {
+      "model": "jev-1.13.0",
+      "precomputation_requests": 500,
+      "table_sha256": "339d8a4092fe5d7d906bbe8a69f668ec4ee31b58477252116630dee052c5637d",
+      "training_evaluation_requests": 0
+    },
+    "architecture": "64 x 64 MLP; paired identical initial weights within each seed",
+    "conditions": [
+      "zeros",
+      "rules",
+      "jev"
+    ],
+    "environment": "Taxi-v4",
+    "episode_limit": 200,
+    "evaluation": "greedy policy from every one of the 300 valid initial states",
+    "gif_initial_states": [
+      461,
+      91,
+      244
+    ],
+    "gif_training_seed": 0,
+    "gymnasium_version": "1.3.0",
+    "horizon": 200000,
+    "initializations_and_final_checkpoints": [
+      {
+        "checkpoint_sha256": "392a49f6d86656d6b140c99b78d729f5c9048e1fc42465cca986c74017ecf916",
+        "condition": "zeros",
+        "initial_model_sha256": "c7d4587762a6cc68de1baa3ba5b6447d279e48f1d26472b6be249e858168c071",
+        "training_seed": 0
+      },
+      {
+        "checkpoint_sha256": "ebebfb523de636832bb1fbbba1facb802430cc6a3e87477ab8547d41eef1e629",
+        "condition": "zeros",
+        "initial_model_sha256": "69f3e2dfa48bbfe46a2df0cf98c797ba63388b2234b71816507f965d287bb711",
+        "training_seed": 1
+      },
+      {
+        "checkpoint_sha256": "6ca99bccf10a2e9021302dab2d56f3450348ba73cd5281cf4db0521b31f53d8c",
+        "condition": "zeros",
+        "initial_model_sha256": "342aa1e61a7e2b46d8dd370a281ab529d7e53f33eadd5e4afa4719376413663a",
+        "training_seed": 2
+      },
+      {
+        "checkpoint_sha256": "aeb4d5877e4ca6a813972b4b96238479fe0c9e1eefe4ff146be86128ffc3f47f",
+        "condition": "zeros",
+        "initial_model_sha256": "0e7d54126db12763c000b3a937d329850636559af17d0873ffea1fbfca396584",
+        "training_seed": 3
+      },
+      {
+        "checkpoint_sha256": "6359c93e46d62357ad0a6a364e21a133c95873a80e0210e4a126b8c2240bdce5",
+        "condition": "zeros",
+        "initial_model_sha256": "d27c63dbae9df355a808c510867ffa5f91ee7b56f59fc7f8e719e9ba32e22f41",
+        "training_seed": 4
+      },
+      {
+        "checkpoint_sha256": "9a0354eb653c956daaa2d660399b12d82f6352d16edc8e4ecb6a11ea98c84c06",
+        "condition": "rules",
+        "initial_model_sha256": "c7d4587762a6cc68de1baa3ba5b6447d279e48f1d26472b6be249e858168c071",
+        "training_seed": 0
+      },
+      {
+        "checkpoint_sha256": "50cff4165fc8e2a4a3b69cb70c925eeb3ca95f0f6ba5bae73780281e10de006b",
+        "condition": "rules",
+        "initial_model_sha256": "69f3e2dfa48bbfe46a2df0cf98c797ba63388b2234b71816507f965d287bb711",
+        "training_seed": 1
+      },
+      {
+        "checkpoint_sha256": "fc655e6acdc3f2b0f0bd02daf3fefac1439feece5f5a3bd02142ac4ac5eaa1f8",
+        "condition": "rules",
+        "initial_model_sha256": "342aa1e61a7e2b46d8dd370a281ab529d7e53f33eadd5e4afa4719376413663a",
+        "training_seed": 2
+      },
+      {
+        "checkpoint_sha256": "417168d340000f007046d836b0ff055a8d78df237071c13d85a7c581cb48dc17",
+        "condition": "rules",
+        "initial_model_sha256": "0e7d54126db12763c000b3a937d329850636559af17d0873ffea1fbfca396584",
+        "training_seed": 3
+      },
+      {
+        "checkpoint_sha256": "44c54f143c5f6d9ce570c5fbfbac38039c0fbea58ea5d0ca8908ef8365401c3f",
+        "condition": "rules",
+        "initial_model_sha256": "d27c63dbae9df355a808c510867ffa5f91ee7b56f59fc7f8e719e9ba32e22f41",
+        "training_seed": 4
+      },
+      {
+        "checkpoint_sha256": "c9c3d7b88aed7b0172cf17e047db0899d362345201f20cdb97590fc1bdd58fa6",
+        "condition": "jev",
+        "initial_model_sha256": "c7d4587762a6cc68de1baa3ba5b6447d279e48f1d26472b6be249e858168c071",
+        "training_seed": 0
+      },
+      {
+        "checkpoint_sha256": "6186ba5cab8f3d329986ebd90cce81a20ee7038666edc200a6a35bdde33ece8d",
+        "condition": "jev",
+        "initial_model_sha256": "69f3e2dfa48bbfe46a2df0cf98c797ba63388b2234b71816507f965d287bb711",
+        "training_seed": 1
+      },
+      {
+        "checkpoint_sha256": "3248509de65d5defc4fe58e68b4626413624f318092582dc8e7c3bcd155f40cc",
+        "condition": "jev",
+        "initial_model_sha256": "342aa1e61a7e2b46d8dd370a281ab529d7e53f33eadd5e4afa4719376413663a",
+        "training_seed": 2
+      },
+      {
+        "checkpoint_sha256": "be584d8ebc86e1f331dc45b7e3ca2eecdc7a9719ef9134cf8b0ae913da43d99e",
+        "condition": "jev",
+        "initial_model_sha256": "0e7d54126db12763c000b3a937d329850636559af17d0873ffea1fbfca396584",
+        "training_seed": 3
+      },
+      {
+        "checkpoint_sha256": "a36d2e39379d9c9400ee4d7b301983c6616174b4852f46e11a35d288d556e1ec",
+        "condition": "jev",
+        "initial_model_sha256": "d27c63dbae9df355a808c510867ffa5f91ee7b56f59fc7f8e719e9ba32e22f41",
+        "training_seed": 4
+      }
+    ],
+    "milestone_steps": 20000,
+    "n_envs": 8,
+    "numpy_version": "2.4.6",
+    "observations": "19 decoded state one-hot values + 40 fixed-map wall bits + eight landmark coordinates + four auxiliary values; total 71",
+    "playback": {
+      "dimensions": [
+        916,
+        251
+      ],
+      "episodes": [
+        {
+          "checkpoint_sha256": "392a49f6d86656d6b140c99b78d729f5c9048e1fc42465cca986c74017ecf916",
+          "condition": "zeros",
+          "illegal_pickup_dropoff": 0,
+          "initial_state": 461,
+          "return": -200.0,
+          "steps": 200,
+          "success": false,
+          "training_seed": 0,
+          "truncated": true
+        },
+        {
+          "checkpoint_sha256": "9a0354eb653c956daaa2d660399b12d82f6352d16edc8e4ecb6a11ea98c84c06",
+          "condition": "rules",
+          "illegal_pickup_dropoff": 0,
+          "initial_state": 461,
+          "return": -200.0,
+          "steps": 200,
+          "success": false,
+          "training_seed": 0,
+          "truncated": true
+        },
+        {
+          "checkpoint_sha256": "c9c3d7b88aed7b0172cf17e047db0899d362345201f20cdb97590fc1bdd58fa6",
+          "condition": "jev",
+          "illegal_pickup_dropoff": 0,
+          "initial_state": 461,
+          "return": -200.0,
+          "steps": 200,
+          "success": false,
+          "training_seed": 0,
+          "truncated": true
+        }
+      ],
+      "frames": 201,
+      "global_step": 200000,
+      "initial_state": 461,
+      "total_duration_ms": 30150,
+      "training_seed": 0,
+      "transformation": "128-color shared palette, no dithering; every source frame and original duration preserved"
+    },
+    "ppo": {
+      "anneal_lr": true,
+      "clip_coef": 0.2,
+      "clip_vloss": true,
+      "ent_coef": 0.01,
+      "gae_lambda": 0.95,
+      "gamma": 0.99,
+      "lr": 0.0003,
+      "max_grad_norm": 0.5,
+      "n_epochs": 4,
+      "n_minibatches": 4,
+      "n_steps": 128,
+      "norm_adv": true,
+      "target_kl": null,
+      "vf_coef": 0.5
+    },
+    "primary": "normalized trapezoidal success AUC over 20k..200k and final success",
+    "secondary": "90% success at three consecutive evaluated milestones",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "torch_version": "2.14.0"
+  }
+}

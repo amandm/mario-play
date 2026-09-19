@@ -2,7 +2,9 @@
 
 An original Mario-style platformer, a Gymnasium environment around it, and a
 reinforcement-learning framework written from scratch in PyTorch (PPO and Double
-DQN) that can train an agent to play it.
+DQN). PPO agents now complete level `1-1`. Our current research asks whether
+frozen assessments from [Jev](https://docs.typesafe.ai/introduction) help PPO
+learn faster.
 
 ![Level 1-1: a frame rendered by the game's own numpy renderer](docs/img/frame-1-1.png)
 
@@ -22,16 +24,46 @@ Three layers, each usable on its own:
   auto-reset, a config-driven trainer with full-resume checkpoints, CSV +
   TensorBoard logging, evaluation and GIF/MP4 recording.
 
-## Status: no trained agent yet
+## Research results: Jev features + PPO
 
-**No full training run has been done.** The repository contains the complete
-game, env and training stack, but no trained weights and no learning curves on the
-real levels; the training configs hold standard starting values, not tuned
-results. What has been verified:
+We trained matched PPO policies with zero auxiliary inputs, Jev assessments
+refreshed every 16 decisions, and Jev assessments refreshed every decision.
+Jev supplies four frozen state features; **PPO chooses every action and learns
+from the original rewards**. This is an observation-augmentation experiment.
+
+![Three final PPO policies at the same two-million-interaction budget](docs/research/mario-matched-2000000.gif)
+
+**Mario: all three final policies completed 20/20 sampled evaluations and the
+separate greedy evaluation at 2M interactions each.** Baseline PPO first met
+the predefined learning target at 600k interactions, versus 900k with frequent
+Jev features and 1.1M with infrequent features. This single-seed, single-level
+pilot did not show faster target attainment with Jev. Performance fluctuated
+between checkpoints; these results do not establish general superiority or harm.
+
+**Taxi: five paired seeds per condition, including an exact-rule feature control.**
+All 15 policies learned to avoid illegal-action penalties but achieved zero
+greedy deliveries from all 300 valid starts at every evaluated milestone through
+200k interactions. That floor effect makes the comparison inconclusive about
+delivery learning.
+
+The [public research package](docs/research/README.md) includes learning curves,
+matched gameplay, every evaluated milestone, per-episode data, and the frozen
+Jev tables. The [Mario report](docs/jev-mario-extension-results.md),
+[Taxi report](docs/taxi-jev-results.md), and
+[learning-loop explanation](docs/jev-assisted-learning.md) describe the methods
+and limitations. Full checkpoint archives remain local.
+
+The tables required **476 Mario and 500 Taxi API requests**. Both assisted Mario
+conditions shared one table; training reused cached outputs. More frequent
+feature refreshes therefore do not mean more API requests. Jev was not fine-tuned.
+
+## Framework verification
+
+In addition to the research runs:
 
 | Claim | Evidence |
 |---|---|
-| Game, env and framework behave as specified | ~1,600 fast tests (`pytest -m "not slow"`, about a minute) |
+| Game, env and framework behave as specified | 1,749 fast tests (`pytest -m "not slow"`, about a minute) |
 | PPO and Double DQN learn | slow tests: both solve `CartPole-v1` from the shipped configs (PPO best eval >= 195, DQN >= 150) |
 | Every bundled level can be finished | the look-ahead `SearchAgent` reaches the flag on `flat`, `1-1`, `1-2` and `1-3` |
 | The whole pipeline runs end to end | short smoke runs: train -> checkpoint -> resume -> eval -> record, for PPO and DQN, grid and pixels |
@@ -39,13 +71,6 @@ results. What has been verified:
 The smoke runs only prove plumbing. For example, 30k steps of PPO on the `flat`
 sanity level reach the flag in every episode - but `flat` has no obstacles, and a
 policy that mostly presses right already finishes it.
-
-The one slightly longer run so far: `configs/ppo_grid.yaml` on level `1-1` for
-300k steps (2.3 minutes on an Apple M4, ~2,150 steps/s). Rollout return rose from
-24 to 42 and explained variance from 0.15 to 0.51; a sampled evaluation of the
-final checkpoint over 20 episodes reached mean progress 0.41 and the flag twice
-(random: 0.19, never). That is a learning signal, not a trained agent - the config
-budgets 5M steps.
 
 Reference points from the non-learning baselines (`mario-play eval --agent ...`,
 default reward, seed 10000):
@@ -59,9 +84,8 @@ default reward, seed 10000):
 | `1-2` | search | 237.3 | 1.00 | flag |
 | `1-3` | search | 244.3 | 1.00 | flag |
 
-A trained policy has to beat the heuristic to be interesting and the search
-agent's return to be good; the search agent cheats, though - it simulates the
-future on copies of the game.
+The search agent plans by simulating future states on copies of the game, so
+its result is a planning reference rather than a matched learning baseline.
 
 ## Quickstart
 
@@ -69,7 +93,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python >= 3.10 (3.11 is pinned in
 `.python-version`; uv downloads it if needed).
 
 ```bash
-git clone <this repository> mario-play
+git clone https://github.com/amandm/mario-play.git
 cd mario-play
 uv sync                                   # creates .venv with everything, dev tools included
 
@@ -211,6 +235,13 @@ episodes also carry Gymnasium's `info["episode"]`.
 
 ## Training
 
+The Jev experiments keep PPO as the learner and add frozen state assessments as
+inputs. See the [longer Mario results](docs/jev-mario-extension-results.md) and the
+[five-seed Taxi protocol](docs/taxi-jev-protocol.md) with its
+[measured results](docs/taxi-jev-results.md). Curated data and media are in the
+[public research package](docs/research/README.md); full checkpoints and working
+run directories are kept in the ignored `runs/` directories.
+
 Configs live in `configs/` and mirror the dataclasses in
 [`src/mario_play/rl/config.py`](src/mario_play/rl/config.py) one to one (unknown
 keys are rejected):
@@ -321,9 +352,10 @@ Dependency direction: `game` <- `envs` <- `agents`; `rl` reaches the env only
 through `envs.factory.make_env`; `cli` sits on top. More in
 [docs/architecture.md](docs/architecture.md).
 
-Both pictures in this README come straight from the game's renderer. The one at
-the top is a single `env.render()` frame of the search agent's run on `1-1`,
-upscaled 2x; the sheet below is written by the preview script:
+The gameplay images come from the game's renderer. The first static picture
+is a single `env.render()` frame of the search agent's run on `1-1`, upscaled
+2x; the research GIF records the trained PPO policies. The sheet below is
+written by the preview script:
 
 ```bash
 uv run python scripts/render_preview.py --level 1-1 --frames 6 --columns 3 --scale 2 --out docs/img/level-1-1.png
@@ -334,7 +366,7 @@ uv run python scripts/render_preview.py --level 1-1 --frames 6 --columns 3 --sca
 ## Testing and linting
 
 ```bash
-uv run pytest -m "not slow"     # fast suite: ~1,600 tests, about a minute
+uv run pytest -m "not slow"     # fast suite: 1,749 tests, about a minute
 uv run pytest -m slow           # ~1.5 min: CartPole convergence (PPO + DQN), search agent on 1-2 / 1-3, long fuzzing
 uv run pytest                   # everything
 uv run ruff check .

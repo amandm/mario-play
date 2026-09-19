@@ -4,6 +4,8 @@
         --table /content/jev-table.json --max-steps 1000000 --device cuda
 
 Repeat with --resume and a larger --max-steps to extend the bounded experiment.
+Add --fixed-budget to complete that budget even after all conditions cross the
+criterion. Without it, the original criterion-based stopping behavior remains.
 The learning-rate horizon remains five million transitions. Each live condition
 keeps its environments, partial rollout, optimizer and independent RNG streams
 between matched stages. Process restarts follow the framework's normal resume
@@ -224,6 +226,22 @@ class StagedTrainer(Trainer):
             self.evaluation_seconds = float(extra.get("evaluation_seconds", 0.0))
             self.advice_before = int(extra.get("logical_advice_updates", 0))
             self.training_stats = extra.get("training", {})
+            self.process_resume_count = int(extra.get("process_resume_count", 0))
+            self.discarded_rollout_transitions = int(extra.get("discarded_rollout_transitions", 0))
+            if resume is not None:
+                batch = cfg.n_envs * cfg.ppo.n_steps
+                pending = int(
+                    extra.get(
+                        "pending_rollout_transitions",
+                        self.global_step
+                        - self.algo.n_updates * batch
+                        - self.discarded_rollout_transitions,
+                    )
+                )
+                if not 0 <= pending < batch:
+                    raise ValueError("checkpoint PPO update/rollout accounting is inconsistent")
+                self.discarded_rollout_transitions += pending
+                self.process_resume_count += 1
             self.initial_model_sha256 = extra.get("initial_model_sha256") or model_digest(
                 self.algo.model
             )
@@ -269,12 +287,17 @@ class StagedTrainer(Trainer):
                 "logical_advice_updates": self.advice_updates(),
                 "initial_model_sha256": self.initial_model_sha256,
                 "training": self.training_stats,
+                "ppo_updates": self.algo.n_updates,
+                "pending_rollout_transitions": len(self.algo.buffer) * self.n_envs,
+                "discarded_rollout_transitions": self.discarded_rollout_transitions,
+                "process_resume_count": self.process_resume_count,
             },
         )
 
     def _training_row(self) -> dict[str, Any]:
         row = super()._training_row()
         row["advice/logical_updates"] = self.advice_updates()
+        row["train/ppo_updates"] = self.algo.n_updates
         self.training_stats = {"global_step": self.global_step, **row}
         return row
 
@@ -368,6 +391,8 @@ class StagedTrainer(Trainer):
             "active_seconds": self.elapsed(),
             "evaluation_seconds": self.evaluation_seconds,
             "training": self.training_stats,
+            "ppo_updates": self.algo.n_updates,
+            "discarded_rollout_transitions": self.discarded_rollout_transitions,
         }
         self.milestones = [row for row in self.milestones if row["global_step"] != self.global_step]
         self.milestones.append(record)
@@ -414,6 +439,10 @@ class StagedTrainer(Trainer):
             "selected_checkpoint": "checkpoints/selected.pt" if selected else None,
             "selected_checkpoint_step": selected["global_step"] if selected else None,
             "fixed_lr_horizon": self.cfg.total_timesteps,
+            "ppo_updates": self.algo.n_updates,
+            "pending_rollout_transitions": len(self.algo.buffer) * self.n_envs,
+            "discarded_rollout_transitions": self.discarded_rollout_transitions,
+            "process_resume_count": self.process_resume_count,
             "updated_utc": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -509,6 +538,7 @@ def run_experiment(
     eval_episodes: int = 20,
     eval_max_steps: int = 6000,
     make_gifs: bool = True,
+    fixed_budget: bool = False,
 ) -> dict[str, Any]:
     run_dir = Path(configs[0].run_dir)
     trainers: list[StagedTrainer] = []
@@ -531,6 +561,7 @@ def run_experiment(
             "max_steps_per_condition": max_steps,
             "stage_steps": stage_steps,
             "fixed_lr_horizon": configs[0].total_timesteps,
+            "fixed_budget": fixed_budget,
             "wall_seconds": prior_seconds + time.perf_counter() - started,
             "conditions": records,
             "training_physical_api_requests": 0,
@@ -571,7 +602,9 @@ def run_experiment(
                 if trainer.global_step < target and not trainer.run_stage(target):
                     return publish("interrupted")
                 publish("training")
-            if all(trainer.snapshot()["first_crossing_step"] is not None for trainer in trainers):
+            if not fixed_budget and all(
+                trainer.snapshot()["first_crossing_step"] is not None for trainer in trainers
+            ):
                 break
         if make_gifs:
             publish("recording")
@@ -582,7 +615,9 @@ def run_experiment(
             trainer.write_progress()
         result = publish("complete")
         result["stop_reason"] = (
-            "all_conditions_crossed"
+            "fixed_budget"
+            if fixed_budget
+            else "all_conditions_crossed"
             if all(trainer.snapshot()["first_crossing_step"] is not None for trainer in trainers)
             else "step_cap"
         )
@@ -603,6 +638,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-steps", type=int, default=1_000_000)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--fixed-budget",
+        action="store_true",
+        help="complete --max-steps even after all conditions cross the criterion",
+    )
     parser.add_argument("--no-gifs", action="store_true")
     args = parser.parse_args(argv)
     if not 0 < args.max_steps <= HORIZON or args.max_steps % STAGE_STEPS:
@@ -628,7 +668,11 @@ def main(argv: list[str] | None = None) -> int:
         "table": "table.json",
         "table_sha256": digest(table),
         "conditions": [config_to_dict(cfg) for cfg in configs],
-        "initialization": "from scratch, seed 0, identical 18-channel architecture and weights",
+        "initialization": (
+            "continue each condition from its latest checkpoint"
+            if args.resume
+            else "from scratch, seed 0, identical 18-channel architecture and weights"
+        ),
         "common_precomputation": {
             "physical_api_requests": read_json(table, {}).get("usage", {}).get("attempted_calls"),
             "usage": read_json(table, {}).get("usage", {}),
@@ -639,10 +683,16 @@ def main(argv: list[str] | None = None) -> int:
         "stage_semantics": "live environments and partial rollouts persist between matched stages",
         "process_resume_limit": "envs and incomplete PPO rollouts restart after process exit",
         "selection": "earliest 12/20 sampled flags plus greedy flag, otherwise best validation",
+        "fixed_budget": args.fixed_budget,
+        "max_steps_per_condition": args.max_steps,
     }
     write_json(run_dir / "experiment.json", manifest)
     result = run_experiment(
-        configs, max_steps=args.max_steps, resume=args.resume, make_gifs=not args.no_gifs
+        configs,
+        max_steps=args.max_steps,
+        resume=args.resume,
+        make_gifs=not args.no_gifs,
+        fixed_budget=args.fixed_budget,
     )
     print(json.dumps(result), flush=True)
     return 130 if result["status"] == "interrupted" else 0

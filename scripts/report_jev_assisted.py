@@ -59,6 +59,15 @@ def criterion(record: dict[str, Any]) -> bool:
     return sampled["flag_rate"] >= 0.6 and greedy["flag_rate"] == 1.0
 
 
+def update_count(record: dict[str, Any]) -> str:
+    """Prefer checkpoint counters; label legacy rollout-derived estimates explicitly."""
+    if record.get("ppo_updates") is not None:
+        return integer(record["ppo_updates"])
+    if record.get("global_step") is not None:
+        return f"{integer(record['global_step'] // 1024)} (estimated)"
+    return "unavailable"
+
+
 def load_results(run_dir: Path) -> dict[str, Any]:
     progress = read_json(run_dir / "progress.json", {})
     if not progress:
@@ -91,6 +100,7 @@ def load_results(run_dir: Path) -> dict[str, Any]:
         "snapshots": snapshots,
         "milestones": milestones,
         "common_steps": common_steps,
+        "continuation": read_json(run_dir / "continuation.json", {}),
     }
 
 
@@ -194,6 +204,19 @@ def plot_learning(data: dict[str, Any], output: Path) -> None:
             axis.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
             axis.grid(axis="y")
             axis.tick_params(axis="both", length=0, pad=7)
+        resumed_at = data.get("continuation", {}).get("starting_steps_per_condition")
+        if resumed_at is not None:
+            for axis in axes:
+                axis.axvline(resumed_at / 1000, color="#94A3B8", linestyle=":", linewidth=1)
+            axes[1].text(
+                resumed_at / 1000 + 12,
+                0.04,
+                "Continuation starts",
+                fontsize=8,
+                color="#64748B",
+                rotation=90,
+                va="bottom",
+            )
         axes[0].set_ylabel("Sampled completion\n20 episodes")
         axes[1].set_ylabel("Sampled mean progress\n20 episodes")
         axes[1].set_xlabel("Training transitions per condition (thousands)", labelpad=10)
@@ -262,6 +285,16 @@ def write_report(data: dict[str, Any], run_dir: Path, output: Path) -> None:
         f"Configured cap: {integer(progress.get('max_steps_per_condition'))} per condition.",
         "",
     ]
+    continuation = data.get("continuation", {})
+    if continuation:
+        lines += [
+            f"Continuation from **{integer(continuation['starting_steps_per_condition'])}** "
+            "transitions per condition, using each latest checkpoint. "
+            f"Learning-rate horizon remains "
+            f"**{integer(continuation['fixed_learning_rate_horizon'])}**. "
+            f"Restart semantics: {continuation['restart_semantics']}.",
+            "",
+        ]
     if cap is not None:
         results = [
             f"{SHORT_LABELS[name]}: **{flags(milestones[name][cap]['sampled'])}**"
@@ -288,7 +321,7 @@ def write_report(data: dict[str, Any], run_dir: Path, output: Path) -> None:
         "at the same checkpoint. First crossing means the first evaluated checkpoint meeting both; "
         "it does not establish that performance remains above the threshold.",
         "",
-        "| Condition | First criterion crossing | PPO updates implied at crossing | "
+        "| Condition | First criterion crossing | PPO updates at crossing | "
         "Sampled at matched budget | Greedy at matched budget | Mean progress | Selected step |",
         "|---|---:|---:|---:|---|---:|---:|",
     ]
@@ -302,7 +335,8 @@ def write_report(data: dict[str, Any], run_dir: Path, output: Path) -> None:
         mean = f"{record['sampled']['mean_progress']:.1%}" if record else "—"
         lines.append(
             f"| {SHORT_LABELS[name]} | {integer(crossing) if crossing else 'not observed'} | "
-            f"{integer(crossing // 1024) if crossing else '—'} | {sampled} | {greedy} | {mean} | "
+            f"{update_count(records[crossing]) if crossing else '—'} | "
+            f"{sampled} | {greedy} | {mean} | "
             f"{integer(snapshots[name].get('selected_checkpoint_step'))} |"
         )
     lines += [
@@ -310,7 +344,7 @@ def write_report(data: dict[str, Any], run_dir: Path, output: Path) -> None:
         "First crossings use all saved evaluations for each condition. "
         "Outcome columns compare the latest evaluation shared by all three conditions.",
         "",
-        "| Condition | Transitions completed | PPO updates implied | Training advice refreshes | "
+        "| Condition | Transitions completed | PPO updates | Training advice refreshes | "
         "Transitions per refresh | Active wall time | Evaluation time within active time |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
@@ -322,17 +356,17 @@ def write_report(data: dict[str, Any], run_dir: Path, output: Path) -> None:
         ratio = f"{count / refresh_count:.2f}" if count is not None and refresh_count else "—"
         lines.append(
             f"| {SHORT_LABELS[name]} | {integer(count)} | "
-            f"{integer(count // 1024) if count is not None else 'unavailable'} | "
+            f"{update_count({**latest, **snapshot})} | "
             f"{integer(refresh_count)} | {ratio} | "
             f"{duration(snapshot.get('active_seconds', latest.get('active_seconds')))} | "
             f"{duration(snapshot.get('evaluation_seconds', latest.get('evaluation_seconds')))} |"
         )
     lines += [
         "",
-        "Implied PPO updates are floor(transitions / 1,024): eight environments × 128 steps "
-        "per rollout. This is a rollout-derived estimate, not optimizer steps; each PPO update has "
-        "four epochs and four minibatches. A process restart discards an incomplete rollout, so "
-        "the estimate can exceed actual PPO updates after a restart. Ordinary stage boundaries "
+        "PPO updates use recorded counters when available. Legacy values marked estimated are "
+        "floor(transitions / 1,024): eight environments × 128 steps per rollout. Each PPO update "
+        "has four epochs and four minibatches. A process restart discards an incomplete rollout, "
+        "so the estimate can exceed actual PPO updates after a restart. Ordinary stage boundaries "
         "preserve partial rollouts. Active wall time includes evaluation and checkpoint work, and "
         "excludes time while another condition is running.",
         "",
@@ -361,8 +395,9 @@ def write_report(data: dict[str, Any], run_dir: Path, output: Path) -> None:
         "",
         "## Method and interpretation",
         "",
-        "All three policies start from scratch with training seed 0, identical 18-channel network "
-        "weights, the same original 14-channel grid, and four auxiliary planes. "
+        "All three policies originally started from scratch with training seed 0 and identical "
+        "18-channel network weights. Observations use the same original 14-channel grid "
+        "and four auxiliary planes. "
         "The control receives "
         "zeros; assisted policies receive four frozen Jev risk probabilities. PPO chooses every "
         "action. Action space, frame skip 4, stall limit 150, level 1-1, rewards, and PPO "
@@ -385,8 +420,13 @@ def write_report(data: dict[str, Any], run_dir: Path, output: Path) -> None:
         "One training seed on one level is exploratory evidence. Earlier threshold crossing can "
         "be reported as an observation of this run, but it does not establish a reliable speedup, "
         "generalization, or a monotonic benefit from more frequent advice. The same validation "
-        "episodes select checkpoints and determine stopping; there is no independent held-out "
-        "assessment in this comparison.",
+        "episodes select example checkpoints. "
+        + (
+            "This run continues to its fixed budget regardless of evaluation scores. "
+            if progress.get("fixed_budget")
+            else "Validation can stop training once every condition meets the target. "
+        )
+        + "There is no independent held-out assessment in this comparison.",
         "",
     ]
     nonmonotonic = []

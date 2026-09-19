@@ -1,0 +1,36 @@
+{
+  "api_calls": 500,
+  "features": {
+    "active_goal_within_two_manhattan_steps": {
+      "correct_at_0_5": 422,
+      "false_negatives": 51,
+      "false_positives": 27,
+      "mean_absolute_error": 0.31887999176979065,
+      "positive_states": 130
+    },
+    "dropoff_ready": {
+      "correct_at_0_5": 488,
+      "false_negatives": 0,
+      "false_positives": 12,
+      "mean_absolute_error": 0.0502999946475029,
+      "positive_states": 4
+    },
+    "pickup_ready": {
+      "correct_at_0_5": 488,
+      "false_negatives": 12,
+      "false_positives": 0,
+      "mean_absolute_error": 0.03957999497652054,
+      "positive_states": 16
+    },
+    "same_row_direct_route_blocked": {
+      "correct_at_0_5": 451,
+      "false_negatives": 5,
+      "false_positives": 44,
+      "mean_absolute_error": 0.21493998169898987,
+      "positive_states": 60
+    }
+  },
+  "source": "actual Jev frozen outputs compared with predeclared exact rules",
+  "table_sha256": "339d8a4092fe5d7d906bbe8a69f668ec4ee31b58477252116630dee052c5637d",
+  "unaccounted_calls": 0
+}

@@ -49,20 +49,17 @@ pilot, not a general verdict about Jev or reinforcement learning.
 
 ## Saved artifacts
 
-- [Full report and learning curves](../runs/colab/jev-assisted-v1/report.md)
-- [Equal-budget gameplay at 1,000,000 interactions](../runs/colab/jev-assisted-v1/matched_1000000.gif)
-- [Midpoint gameplay at 500,000 interactions](../runs/colab/jev-assisted-v1/matched_500000.gif)
-- [Selected control policy](../runs/colab/jev-assisted-v1/baseline/selected.gif)
-- [Selected frequent-advice policy](../runs/colab/jev-assisted-v1/jev_interval1/selected.gif)
+- [Public curves, milestone data, frozen tables, and final 2M gameplay](research/README.md)
+- [Two-million-interaction continuation results](jev-mario-extension-results.md)
 - [Fixed experiment protocol](jev-assisted-experiment.md)
 - [How the learning loop works](jev-assisted-learning.md)
 
-The run folder retains every evaluated checkpoint, individual episode outcomes,
+The local run folder retains every evaluated checkpoint, individual episode outcomes,
 configuration, exact frozen Jev outputs, source manifest, and playback metadata.
 The original source archive is in `runs/colab/jev-assisted-v1-tools/source.zip`.
 The raw run artifacts are intentionally git-ignored.
 
-To regenerate equal-budget playback after downloading the run:
+For a local run with saved checkpoints, regenerate equal-budget playback with:
 
 ```bash
 uv run python scripts/record_jev_comparison.py \
