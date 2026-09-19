@@ -1,0 +1,63 @@
+# Double DQN from pixels: the Nature-DQN pipeline on the frames a human sees.
+#
+#   mario-play train --config configs/dqn_pixels.yaml
+#   mario-play train --config configs/dqn_pixels.yaml dqn.buffer_size=50000     # 2.8 GB instead of 5.6 GB
+#
+# Observation: (4, 84, 84) uint8 = grayscale 84x84, last 4 frames stacked, NatureCNN.
+# Meant for a GPU and a machine with RAM to spare (see buffer_size).
+# NOTE: no full-length run has been done with this file yet.
+algo: dqn
+total_timesteps: 10000000
+n_envs: 8
+vec_env: subproc         # rendering + resizing dominates a pixel step: one process per env pays off
+seed: 0
+device: auto             # cuda > mps > cpu
+log_interval: 50000
+checkpoint_interval: 500000
+keep_checkpoints: 3
+
+env:
+  id: MarioPlay-v0
+  level: "1-1"
+  obs_mode: pixels
+  action_set: simple
+  frame_skip: 4
+  frame_stack: 4         # motion is invisible in a single frame
+  grayscale: true
+  resize: [84, 84]       # (H, W)
+  stall_steps: 150       # 10 s of game time without new ground: truncate instead of idling to the timeout
+  hud: true
+  # Keep the rare big rewards (death -15, flag +50) from dwarfing the +1-per-tile signal in the Q-targets.
+  reward:
+    clip: 5.0
+
+network:
+  encoder: auto          # uint8 (C, H, W) observations -> NatureCNN (scales by 1/255 itself)
+  hidden_size: 512
+
+dqn:
+  lr: 1.0e-4
+  # RAM: frames stay uint8, but obs AND next_obs are stored, so 100k transitions cost
+  # 2 x 100k x (4*84*84 B) = ~5.6 GB once the buffer is full (the OS backs it lazily, so
+  # the process grows while it fills). Use 50000 (~2.8 GB) on a 16 GB laptop. The buffer
+  # is not checkpointed: after --resume it refills before updates continue.
+  buffer_size: 100000
+  learning_starts: 50000
+  batch_size: 32
+  gamma: 0.99
+  train_freq: 1          # update after every vector step (= 8 env transitions) ...
+  gradient_steps: 2      # ... with 2 gradient steps: the classic 1 gradient step per 4 transitions
+  target_update_interval: 10000   # env transitions between hard target syncs
+  tau: 1.0
+  eps_start: 1.0
+  eps_end: 0.05
+  eps_decay_steps: 1000000  # 10% of the run
+  double_q: true
+  dueling: true
+  max_grad_norm: 10.0
+
+eval:
+  interval: 250000
+  # Deterministic game + greedy policy = the same episode every time: one is enough.
+  episodes: 1
+  deterministic: true

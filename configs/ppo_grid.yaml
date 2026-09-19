@@ -1,0 +1,60 @@
+# PPO on the compact grid observation: the recommended starting point.
+#
+#   mario-play train --config configs/ppo_grid.yaml
+#   mario-play train --config configs/ppo_grid.yaml env.level=flat total_timesteps=300000   # sanity run
+#   mario-play train --resume runs/<run> total_timesteps=1e7                                # train longer
+#
+# The grid is a (14, 15, 16) float32 tile view around the player (see
+# mario_play/envs/observations.py). It needs no renderer, so an env step costs a
+# fraction of a pixel step and everything here runs well on a laptop CPU.
+# NOTE: no full-length run has been done with this file yet. The values are standard
+# PPO settings sized for this env, not tuned results.
+algo: ppo
+total_timesteps: 5000000
+n_envs: 8
+vec_env: sync            # grid steps are so cheap that process round trips would cost more than they save
+seed: 0
+# cuda > mps > cpu. The env is cheap (~30k steps/s), so the PPO update dominates: in an 8k-step
+# smoke run on an M4, auto (MPS) reached ~2,100 steps/s against ~900 with device=cpu.
+device: auto
+log_interval: 20000
+checkpoint_interval: 250000
+keep_checkpoints: 3
+
+env:
+  id: MarioPlay-v0
+  level: "1-1"           # a list, e.g. ["1-1", "1-2"], draws one level per episode
+  obs_mode: grid
+  action_set: simple     # 7 actions: noop, right(+jump)(+run), jump, left
+  frame_skip: 4          # 15 decisions per second of game time
+  frame_stack: 1         # velocities are part of the grid's scalar planes: no stacking needed
+  stall_steps: 150       # 10 s of game time without new ground: truncate instead of idling to the 400 s timeout
+  # reward: {}           # RewardConfig defaults: +1 per tile of progress, -0.01 per step, -15 death, +50 flag
+
+network:
+  encoder: auto          # float (C, H, W) observations -> the small GridEncoder conv stack
+  hidden_size: 256
+
+ppo:
+  lr: 2.5e-4
+  anneal_lr: true        # linearly to 0 over total_timesteps (raise total_timesteps when resuming)
+  n_steps: 128           # rollout = 128 steps x 8 envs = 1024 transitions per update
+  n_epochs: 4
+  n_minibatches: 4       # 256 transitions per minibatch
+  gamma: 0.99            # horizon of ~100 decisions = ~7 s of game time
+  gae_lambda: 0.95
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.01         # keeps the policy from collapsing onto "hold right" before it has learned to jump
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  target_kl: null
+
+eval:
+  interval: 100000
+  # The game is deterministic and so is a greedy policy: every greedy episode of one
+  # level is the same episode, so one is enough. For the sampled policy use
+  # deterministic=false together with more episodes.
+  episodes: 1
+  deterministic: true

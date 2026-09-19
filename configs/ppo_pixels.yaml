@@ -1,0 +1,56 @@
+# PPO from pixels: the classic Atari-style pipeline on the frames a human sees.
+#
+#   mario-play train --config configs/ppo_pixels.yaml
+#   mario-play bench --obs-mode pixels --n-envs 16 --vec subproc     # what this machine can do
+#
+# Observation: 240x256 RGB frame -> grayscale -> 84x84 -> last 4 frames stacked =
+# (4, 84, 84) uint8, encoded by the NatureCNN. Far more compute than the grid
+# config: meant for a GPU (or patience). 10M steps is a budget, not a promise -
+# NOTE: no full-length run has been done with this file yet.
+algo: ppo
+total_timesteps: 10000000
+n_envs: 16
+vec_env: subproc         # rendering + resizing dominates a pixel step: one process per env pays off
+seed: 0
+device: auto             # cuda > mps > cpu
+log_interval: 50000
+checkpoint_interval: 500000
+keep_checkpoints: 3
+
+env:
+  id: MarioPlay-v0
+  level: "1-1"
+  obs_mode: pixels
+  action_set: simple
+  frame_skip: 4
+  frame_stack: 4         # motion is invisible in a single frame
+  grayscale: true
+  resize: [84, 84]       # (H, W)
+  stall_steps: 150       # 10 s of game time without new ground: truncate instead of idling to the timeout
+  hud: true              # the agent sees what a human sees, clock included
+
+network:
+  encoder: auto          # uint8 (C, H, W) observations -> NatureCNN (scales by 1/255 itself)
+  hidden_size: 512
+
+ppo:
+  lr: 2.5e-4
+  anneal_lr: true
+  n_steps: 128           # rollout = 128 steps x 16 envs = 2048 transitions per update
+  n_epochs: 4
+  n_minibatches: 4       # 512 transitions per minibatch
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_coef: 0.1         # the Atari setting: smaller policy steps for the high-variance pixel gradients
+  clip_vloss: true
+  ent_coef: 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  target_kl: null
+
+eval:
+  interval: 250000
+  # Deterministic game + greedy policy = the same episode every time: one is enough.
+  episodes: 1
+  deterministic: true

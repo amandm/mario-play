@@ -1,0 +1,59 @@
+# Double DQN on the compact grid observation.
+#
+#   mario-play train --config configs/dqn_grid.yaml
+#
+# Off-policy counterpart of ppo_grid.yaml: same env, same network body, CPU-friendly.
+# NOTE: no full-length run has been done with this file yet. The values are standard
+# DQN settings sized for this env, not tuned results.
+algo: dqn
+total_timesteps: 5000000
+n_envs: 8
+vec_env: sync            # grid steps are cheap: no worker processes needed
+seed: 0
+device: auto             # cuda > mps > cpu
+log_interval: 20000
+checkpoint_interval: 250000
+keep_checkpoints: 3
+
+env:
+  id: MarioPlay-v0
+  level: "1-1"
+  obs_mode: grid
+  action_set: simple
+  frame_skip: 4
+  frame_stack: 1
+  stall_steps: 150       # 10 s of game time without new ground: truncate instead of idling to the timeout
+  # Q-targets are sums of rewards: keep the rare big ones (death -15, flag +50) from
+  # dwarfing the +1-per-tile signal the agent has to follow most of the time.
+  reward:
+    clip: 5.0
+
+network:
+  encoder: auto          # float (C, H, W) observations -> GridEncoder
+  hidden_size: 256
+
+dqn:
+  lr: 1.0e-4
+  # Both obs and next_obs are stored: 2 x 100k x (14*15*16 floats x 4 B) = ~2.7 GB of RAM
+  # once the buffer is full. Halve buffer_size on a small machine. The buffer is not
+  # checkpointed: after --resume it refills before updates continue.
+  buffer_size: 100000
+  learning_starts: 20000
+  batch_size: 32
+  gamma: 0.99
+  train_freq: 1          # update after every vector step (= 8 env transitions) ...
+  gradient_steps: 2      # ... with 2 gradient steps: the classic 1 gradient step per 4 transitions
+  target_update_interval: 10000   # env transitions between hard target syncs
+  tau: 1.0               # 1.0 = hard syncs; < 1 switches to Polyak averaging
+  eps_start: 1.0
+  eps_end: 0.05
+  eps_decay_steps: 500000  # 10% of the run; afterwards 5% random actions keep exploring
+  double_q: true
+  dueling: true          # most actions are equivalent in most states: learn V(s) once, advantages on top
+  max_grad_norm: 10.0
+
+eval:
+  interval: 100000
+  # Deterministic game + greedy policy = the same episode every time: one is enough.
+  episodes: 1
+  deterministic: true

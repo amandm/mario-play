@@ -15,7 +15,7 @@ from mario_play.rl.checkpoint import save_checkpoint
 from mario_play.rl.config import EnvConfig, config_to_dict
 from mario_play.rl.debug_envs import COUNTING_ENV_ID
 from mario_play.rl.evaluate import evaluate, load_algorithm
-from mario_play.rl.utils import get_rng_state
+from mario_play.rl.utils import get_rng_state, set_seed
 
 CPU = torch.device("cpu")
 COUNTING = f"mario_play.rl.debug_envs:{COUNTING_ENV_ID}"
@@ -28,6 +28,23 @@ def build_algo(cfg, n_envs: int = 1):
     algo = cls(env.observation_space, env.action_space, cfg, CPU, n_envs)
     env.close()
     return algo
+
+
+class PoleAnglePolicy:
+    """Torch-free CartPole policy: push the cart towards the side the pole leans to.
+
+    Unlike a constant action (down after ~9 steps whatever the start) it survives for a number of
+    steps that depends on the initial state, so different evaluation seeds score differently. It
+    records the observations it is shown.
+    """
+
+    def __init__(self) -> None:
+        self.observations: list[np.ndarray] = []
+
+    def predict(self, obs: np.ndarray, deterministic: bool = True) -> np.ndarray:
+        obs = np.asarray(obs)
+        self.observations.extend(obs.copy())
+        return (obs[:, 2] > 0).astype(np.int64)
 
 
 def save(algo, cfg, path, global_step: int = 123, best_eval: float | None = 4.5) -> None:
@@ -110,13 +127,29 @@ def test_std_return_is_the_population_std_over_episodes(tiny_cfg):
     assert result["std_return"] == pytest.approx(np.std(returns))
 
 
-def test_same_seed_gives_the_same_result_and_other_seeds_differ(tiny_cfg):
-    algo = build_algo(tiny_cfg())
-    first = evaluate(algo, CARTPOLE, episodes=5, seed=7)
-    again = evaluate(algo, CARTPOLE, episodes=5, seed=7)
+@pytest.mark.parametrize("global_seed", [0, 1, 2, 7])
+def test_same_seed_gives_the_same_result_and_other_seeds_differ(global_seed):
+    # Deliberately not a freshly initialised network: for many inits (torch seeds 0, 1 and 7 among
+    # them) its greedy policy lasts equally long on every seed - 9 steps or the full 500 - so the
+    # outcome would hang on whatever state the global torch RNG happens to be in.
+    set_seed(global_seed)
+    policy = PoleAnglePolicy()
+    first = evaluate(policy, CARTPOLE, episodes=5, seed=7)
+    again = evaluate(policy, CARTPOLE, episodes=5, seed=7)
     assert first == again
-    lengths = {evaluate(algo, CARTPOLE, episodes=5, seed=s)["mean_length"] for s in (7, 8, 9, 10)}
+    lengths = {evaluate(policy, CARTPOLE, episodes=5, seed=s)["mean_length"] for s in (7, 8, 9, 10)}
     assert len(lengths) > 1
+
+
+def test_the_seed_alone_fixes_the_initial_conditions():
+    def observations(seed: int, global_seed: int) -> np.ndarray:
+        set_seed(global_seed)  # the env is seeded through reset(), never from the global RNGs
+        policy = PoleAnglePolicy()
+        evaluate(policy, CARTPOLE, episodes=3, seed=seed)
+        return np.stack(policy.observations)
+
+    np.testing.assert_array_equal(observations(7, global_seed=0), observations(7, global_seed=1))
+    assert not np.array_equal(observations(7, global_seed=0)[0], observations(8, global_seed=0)[0])
 
 
 def test_mario_extras_are_reported_when_the_env_provides_them(flag_run_env_id, constant_policy):

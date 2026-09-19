@@ -54,7 +54,9 @@ class MarioEnv(gym.Env):
 
     Public attributes: `game` (the live `Game`; replaced on `reset` when several
     levels are configured), `action_buttons` (`Buttons` per action index),
-    `frame_skip`, `obs_mode`, `reward_config`, `stall_steps`, `level_names`.
+    `frame_skip`, `obs_mode`, `reward_config`, `stall_steps`, `level_names` and
+    `window_scale` (integer magnification of the human window; set it before the
+    first frame is shown, i.e. before the first `reset`).
 
     `info` (from `reset` and `step`): `x_pos`, `max_x` (furthest x at the end of
     any step of this episode), `progress` (`max_x` as a 0-1 fraction of the way from
@@ -112,6 +114,7 @@ class MarioEnv(gym.Env):
         self.game: Game = Game(self._levels[self._game_key])
         self._renderer: Renderer | None = None
         self._window: Any = None
+        self.window_scale: int = HUMAN_WINDOW_SCALE
         self._needs_reset = True
         self._warned_after_end = False
         self._start_x = self.game.player.x
@@ -264,7 +267,7 @@ class MarioEnv(gym.Env):
         if self._window is None:
             from mario_play.game.human import Window  # lazy: only this mode needs pygame
 
-            self._window = Window(scale=HUMAN_WINDOW_SCALE, title=f"mario-play - {self._title()}")
+            self._window = Window(scale=self.window_scale, title=f"mario-play - {self._title()}")
         window = self._window
         fps = int(self.metadata["render_fps"])
         window.show(self.render_frame())
