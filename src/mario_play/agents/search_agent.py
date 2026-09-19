@@ -40,6 +40,9 @@ DEFAULT_COMMIT_FRAMES = 16
 DEFAULT_SETTLE_FRAMES = 96
 """Defaults are game frames, converted to env steps with the env's `frame_skip`."""
 
+COAST_UNITS = 12
+"""Plan units a surviving plan gets to come to rest after its horizon (it has to survive that)."""
+
 CHECKPOINT_TRIES = 3
 CHECKPOINT_STRIDE = 3
 """A deadly plan: how many of its grounded steps are checked for a way out, and how far apart."""
@@ -185,6 +188,8 @@ class SearchAgent:
         self.plans: list[tuple[int, ...]] = []
         self._scripted: list[int] = []  # per plan: steps before its filler takes over
         self._compile(default_plan_library() if plans is None else plans, index)
+        self._noop: Buttons | None = self._buttons[index[_NOOP]] if _NOOP in index else None
+        self._coast_steps = self._units(COAST_UNITS)
         if not self.plans:
             raise ValueError("no plan can be expressed with the env's action set")
         self._macros: list[tuple[int, int, int | None]] = [
@@ -275,12 +280,22 @@ class SearchAgent:
                 advance(game, filler, frame_skip)
         if game.won:
             return _WIN - (game.frame - start_frame), player.x, [], game.frame - start_frame
+        end_x = player.x
+        if not game.over and self._noop is not None:
+            # Alive is not enough: the plan must be able to come to rest. Sliding off an edge
+            # or into an enemy right after the horizon is as deadly as doing it before.
+            for _ in range(self._coast_steps):
+                if player.on_ground and player.vx == 0.0:
+                    break
+                advance(game, self._noop, frame_skip)
+                if game.over:
+                    break
         # Mostly "how far right does this end", but sooner beats later: without the
         # average, waiting a little longer always looks just as good as acting now.
         early = _EARLY_WEIGHT * x_sum / len(plan)
         frames = game.frame - start_frame
-        if not game.over:
-            return player.x + early, player.x, [], frames
+        if not game.over or game.won:  # (won: while coming to rest)
+            return end_x + early, end_x, [], frames
         if grounded:
             return grounded_x + early - _DOOMED_PENALTY, grounded_x, grounded, frames
         return _DEATH + _SURVIVAL_WEIGHT * frames + player.x, player.x, [], frames

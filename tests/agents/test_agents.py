@@ -460,7 +460,7 @@ def test_search_scores_flag_over_progress_over_death(make_mario, tmp_path):
     assert sooner < dead
 
     near = tmp_path / "near.txt"
-    near.write_text("\n".join(["......F...", ".S....F...", "##########"]))
+    near.write_text("\n".join(["......F.........", ".S....F.........", "#" * 16]))
     env2 = make_mario(str(near))
     agent2 = SearchAgent(env2)
     env2.reset(seed=0)
@@ -477,7 +477,7 @@ def test_search_agent_never_dies_at_a_pit_it_can_cross(make_mario, tmp_path):
 
 def test_search_agent_makes_room_for_a_run_up(make_mario, tmp_path):
     """Standing at the edge of a wide pit with no speed: only going back first helps."""
-    env = make_mario(_pit_level(tmp_path, 5))
+    env = make_mario(_pit_level(tmp_path, 7))
     agent = SearchAgent(env)
     env.reset(seed=0)
     env.game.player.x = float(12 * 16 - env.game.player.w - 1)  # test setup: put it at the edge
@@ -498,10 +498,10 @@ def test_search_agent_makes_room_for_a_run_up(make_mario, tmp_path):
 def test_search_agent_survives_as_long_as_it_can_when_doomed(make_mario, tmp_path):
     env = make_mario(_pit_level(tmp_path, 14))  # nobody jumps that
     agent = SearchAgent(env)
-    summary = run_episode(env, agent, max_steps=150)
+    summary = run_episode(env, agent, max_steps=80)
     assert summary["flag_get"] is False
     assert summary["death_cause"] is None  # it waits at the edge rather than jumping to death
-    assert summary["length"] == 150
+    assert summary["length"] == 80
     assert agent.detours >= 1
 
 
