@@ -1,7 +1,10 @@
 # Training guide
 
+For the current learning task, follow [one PPO agent on level 1-1](ppo-learning.md).
+That workflow follows the agent's progress and gameplay without comparison runs.
+
 Practical advice for training agents with mario-play: what to expect on a laptop,
-how to size a run, how to train on a rented GPU or Colab across several sessions,
+how to size a run, how to train on Colab across several sessions,
 where to start with hyperparameters, what to watch in TensorBoard and what
 usually goes wrong.
 
@@ -118,12 +121,25 @@ Memory: PPO needs little. DQN's replay stores obs **and** next obs: 100k grid
 transitions are ~2.7 GB, 100k pixel transitions ~5.6 GB, allocated lazily while
 the buffer fills. Lower `dqn.buffer_size` on a small machine.
 
-## 3. Cloud GPU / Colab: training across sessions
+## 3. Remote compute / Colab Pro: training across sessions
 
 The trainer is built for preemptible machines: everything needed to continue
 lives in `runs/<run_name>/`, and `--resume` picks up `latest.pt`.
 
-### A rented GPU box (SSH)
+**Project policy: no new purchases.** The user has authorized the existing Colab
+Pro subscription and its available compute units for requested training jobs.
+Never buy compute units, top up credits, upgrade, or start another subscription.
+Check the current balance before allocation and the runtime's consumption rate
+before training. Use the benchmark to estimate the remaining suite's cost,
+leave a reserve, and stop before the allowance is exhausted. Save results and
+stop the runtime when finished. The training scripts do not enforce a billing
+limit; monitor usage in Colab. Use verified free resources or local CPU / MPS
+when the existing allowance is insufficient.
+
+### An already available, verified free machine (SSH)
+
+These commands assume an existing machine available at no additional cost;
+they do not authorize renting or provisioning paid hardware.
 
 ```bash
 git clone <this repository> mario-play && cd mario-play
@@ -174,34 +190,189 @@ moved freely: resuming continues in whatever directory the checkpoint sits in.
 If you only want the policy, `best.pt` alone is enough for `eval`, `watch` and
 `record` - it contains the config.
 
-### Colab
+### Colab: benchmark first, then three seeded experiments
 
-Colab sessions end after a few hours and the local disk is wiped, so write runs to
-Google Drive and resume from there. In notebook cells:
+The repeatable starting suite is an independent **50k-step PPO grid benchmark**,
+then **300k steps each with seeds 0, 1, and 2** on `1-1`. Checkpoints are written
+every 50k steps. The runner records runtime details, wall-clock throughput,
+training metrics, and sampled/greedy evaluation over 20 held-out episode seeds.
+These are exploratory runs, not a claim that a policy will finish the level.
 
-```python
-from google.colab import drive
-drive.mount("/content/drive")
-```
+Colab GPU access, runtime resources, and session duration vary; early termination
+is possible. The VM disk is temporary, so download results after each experiment
+or write checkpoints directly to Drive with the user's Drive consent. Drive
+writes add overhead; an abrupt termination can lose progress since the latest
+completed durable copy. See the
+[Colab FAQ](https://research.google.com/colaboratory/faq.html).
+
+#### Notebook workflow (also the CLI fallback)
+
+1. Package the current checkout, including uncommitted experiment code:
+   `uv run python scripts/package_colab.py`. This creates
+   `runs/colab/mario-play.zip` from a source allowlist, excluding `.git`,
+   credentials, environments, and run outputs.
+2. Open [notebooks/colab_experiments.ipynb](../notebooks/colab_experiments.ipynb)
+   through **File → Upload notebook** at [Colab](https://colab.research.google.com/).
+3. **Before connecting**, verify the existing Pro balance. Choose a T4 GPU with
+   standard RAM for this initial suite; check its consumption rate before
+   training. Do not purchase or upgrade if allocation or allowance is unavailable.
+4. Connect, upload the source ZIP, approve the separate Drive consent, mount
+   Drive, and run the benchmark. Use the CLI workflow below if Drive access is
+   not desired. The notebook defaults to `DEVICE = "cuda"` and checks that CUDA
+   is available. It does not allocate a GPU automatically. It preserves Colab's
+   installed PyTorch build. Keep CPU and GPU comparisons in separate folders.
+5. Inspect benchmark throughput and estimate remaining unit usage before the
+   three-seed experiment cell. Monitor the balance and interrupt before
+   exhaustion. On a new session, recheck the allowance and repeat setup with the
+   same Drive output folder to resume. Download results and disconnect/delete
+   the runtime when finished.
+
+The notebook contains result inspection and download cells. It works without
+publishing your local changes to GitHub. Requested resources may be unavailable; a
+failed GPU allocation is not evidence that the training code is incompatible.
+
+#### CLI workflow using the existing Pro allowance
+
+The [official Colab CLI](https://github.com/googlecolab/google-colab-cli) provides
+runtime allocation, file transfer, Drive mounting, execution, and teardown.
+The commands below use version 0.6.0. Its unconstrained installation currently
+imports `KernelClient`, which was removed in `jupyter-kernel-client` 1.x; the
+explicit dependency constraint below avoids that import failure.
+
+T4 allocation can consume the account's existing compute units. Check the balance
+in Colab first, then check the allocated runtime's rate before training. Start
+with one runtime and the 50k benchmark; only proceed if the projected suite fits
+comfortably within the remaining allowance. Do not use `colab pay` or purchase
+additional units. Version 0.6.0 has no free-only allocation flag.
+
+Local preparation is safe without allocating a runtime:
 
 ```bash
-!git clone <this repository> mario-play
-%cd mario-play
-!pip install uv && uv sync
-!uv run mario-play train --config configs/ppo_grid.yaml run_dir=/content/drive/MyDrive/mario-runs run_name=ppo_grid_1-1
+uv tool install --with 'jupyter-kernel-client<1' google-colab-cli==0.6.0
+uv run python scripts/package_colab.py
 ```
 
-Next session: mount Drive, clone and `uv sync` again, then
+After checking the existing allowance, create one named T4 runtime and upload the
+source. Check `colab sessions` first to avoid duplicating an existing session.
 
 ```bash
-!uv run mario-play train --resume /content/drive/MyDrive/mario-runs/ppo_grid_1-1
+colab sessions
+colab new -s mario-pro --gpu T4
+colab status -s mario-pro
+colab upload -s mario-pro runs/colab/mario-play.zip /content/mario-play.zip
 ```
 
-Colab notes: free instances have two CPU cores, so many subprocess envs will not
-scale - check with `bench` and lower `n_envs` for the pixel configs. Keep
-`checkpoint_interval` small enough that a disconnect costs little. Writing
-TensorBoard events to Drive is slow but works; point TensorBoard at the Drive
-folder (`%load_ext tensorboard`, `%tensorboard --logdir /content/drive/MyDrive/mario-runs`).
+Initial authentication opens Google's consent flow. Review the requested scopes:
+the CLI's default authentication can request Cloud, Colab, and app-specific Drive
+access, and mounting Drive grants notebook code access to Drive files. Finish
+consent in the browser before continuing. This CLI example saves results through
+downloads and does not need a Drive mount. Optional `colab drivemount -s mario-pro`
+requires its separate Drive consent; use the notebook's Drive path only after
+that access is approved.
+
+Install the uploaded source in the runtime's existing Python environment, keeping
+its installed PyTorch version. These `colab exec` calls share one remote kernel:
+
+```bash
+colab exec -s mario-pro --timeout 600 <<'PY'
+from pathlib import Path
+from importlib.metadata import version
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
+
+root = Path('/content/mario-play')
+root.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile('/content/mario-play.zip') as archive:
+    for member in archive.infolist():
+        if not (root / member.filename).resolve().is_relative_to(root.resolve()):
+            raise ValueError('Archive path leaves the source directory')
+    archive.extractall(root)
+os.chdir(root)
+constraints = Path('/content/mario-colab-constraints.txt')
+constraints.write_text(f"torch=={version('torch')}\n")
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-c', str(constraints), '-e', '.'], check=True)
+import torch
+device = 'cuda'
+if device == 'cuda' and not torch.cuda.is_available():
+    raise RuntimeError('No CUDA GPU is allocated; inspect the runtime before training')
+print({'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+       'cpu_count': os.cpu_count(), 'torch': torch.__version__})
+run_root = Path('/content/mario-pro-results')
+run_root.mkdir(parents=True, exist_ok=True)
+manifest = root / 'source_manifest.json'
+saved_manifest = run_root / 'source_manifest.json'
+if saved_manifest.exists() and saved_manifest.read_bytes() != manifest.read_bytes():
+    raise ValueError('Source changed: use a new run_root')
+shutil.copy2(manifest, saved_manifest)
+command = [sys.executable, 'scripts/run_experiments.py', '--device', device,
+           '--run-root', str(run_root)]
+PY
+
+colab exec -s mario-pro --timeout 600 <<'PY'
+subprocess.run(command + ['--benchmark-only'], cwd=root, check=True)
+print((run_root / 'benchmark/summary.json').read_text())
+PY
+
+# Check benchmark speed, remaining balance, and projected units before each seed.
+colab exec -s mario-pro --timeout 1800 <<'PY'
+subprocess.run(command + ['--skip-benchmark', '--seeds', '0'], cwd=root, check=True)
+print((run_root / 'summary.json').read_text())
+PY
+```
+
+Repeat the seed command for `1` and `2`, downloading results after each run with
+the commands below. These commands use the runner's defaults of 50k benchmark
+steps, 300k steps per seed, and 50k checkpoint intervals.
+
+Keep execution attached while training. CLI timeouts bound waiting, not billing;
+check for active work and stop the runtime explicitly after an error. Repeating
+a phase resumes incomplete runs and skips completed ones. A fresh VM requires
+the saved result directory to be uploaded/extracted back into `run_root`, in
+addition to repeating source upload and setup. Recheck the allowance first.
+Use a new output folder when changing source or hyperparameters. `--steps` can
+extend the target, and `--device` can change on resume; PPO environments restart
+their episodes. Tune with repeated
+`--set KEY=VALUE` arguments, for example `--set ppo.ent_coef=0.02`.
+
+Download the result directory after the benchmark and each seed. If using Drive,
+this is an additional copy. After the final download, export the session log and
+stop the runtime:
+
+```bash
+colab exec -s mario-pro --timeout 600 <<'PY'
+shutil.make_archive('/content/mario-results', 'zip', root_dir=run_root.parent, base_dir=run_root.name)
+PY
+mkdir -p runs/colab/colab-pro-t4-v1
+colab download -s mario-pro /content/mario-results.zip runs/colab/colab-pro-t4-v1/results.zip
+
+# After all requested experiments (or when stopping early):
+colab log -s mario-pro -o runs/colab/colab-pro-t4-v1/session.ipynb
+colab stop -s mario-pro
+```
+
+The root `summary.json` collects the benchmark and seed results; each run also
+has its own `summary.json`. `training_steps_per_second` includes periodic
+evaluation and checkpoint writes. Compare against the same laptop benchmark:
+
+```bash
+uv run python scripts/run_experiments.py --device mps \
+    --run-root runs/experiments/m4-baseline --benchmark-only
+```
+
+Use `--device cpu` on a machine without MPS. CPU count and memory should be
+measured from the allocated runtime; do not assume a fixed core count.
+For pixel experiments, benchmark worker counts before increasing `n_envs`.
+
+When existing cloud allowance or verified free capacity is unavailable, run the
+same three-seed suite locally:
+
+```bash
+uv run python scripts/run_experiments.py --device mps \
+    --run-root runs/experiments/m4-baseline --skip-benchmark
+```
 
 ## 4. Hyperparameter starting points
 

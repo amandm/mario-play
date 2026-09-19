@@ -2,8 +2,11 @@
 
 Guide for AI and human contributors. mario-play is an original Mario-style
 platformer (pure Python + numpy), a Gymnasium env around it (`MarioPlay-v0`) and a
-from-scratch PyTorch RL framework (PPO + Double DQN). **No full training run has
-been done yet** - do not write docs or comments that imply trained results exist.
+from-scratch PyTorch RL framework (PPO + Double DQN). A PPO policy trained on
+Colab has demonstrated completion of level `1-1` at its one-million-step
+checkpoint. The user requested stopping once learning was evident, without
+training to full convergence. Artifacts are in `runs/colab/ppo-agent-v1/`;
+performance on other levels has not been established.
 
 ## Commands
 
@@ -60,6 +63,31 @@ Training practice: [docs/training-guide.md](docs/training-guide.md).
 
 ## Hard rules
 
+- **Current learning focus: one PPO agent on level `1-1`.** Use Colab for
+  training and explain progress through the agent's behavior, rewards, and
+  completion rate. Do not add algorithm, hardware, or multi-seed comparisons
+  unless the user asks for them. Evidence of learning is sufficient for the
+  user's current goal; do not train to full convergence just to finish a budget.
+- **Jev comparison is now requested.** The user explicitly authorized a hosted
+  Jev controller and a visual comparison with the saved PPO checkpoint on the
+  same game setup. Label Jev as pretrained inference, preserve the PPO weights,
+  and keep API calls bounded within verified existing/free allowance. Credentials
+  belong only in the ignored `.env`; never print or include them in artifacts.
+- **Current experiment: Jev-assisted PPO learning.** Train fresh matched PPO
+  policies with no advice, advice every 16 actions, and advice every action.
+  Jev supplies frozen risk assessments as inputs; PPO chooses all actions and
+  learns only from unchanged game rewards. Match architecture, initialization,
+  training budgets, and evaluation conditions. Count game interactions, advice
+  refreshes, unique API calls, and wall time separately. Reuse identical cached
+  Jev assessments; do not claim cache lookups are new API calls or that more
+  advice is guaranteed to improve learning.
+- **No new purchases.** Never purchase compute, top up credits, upgrade, or
+  start a paid subscription. The user has authorized their existing Colab Pro
+  subscription and its available compute units for requested training jobs.
+  Check the balance before allocation and the runtime's consumption rate before
+  training; size bounded runs to fit with a reserve and stop before exhaustion.
+  Save results and stop runtimes when finished. If existing allowance is
+  insufficient, use verified free resources or local CPU / MPS.
 - **`mario_play.game` must not import torch, gymnasium or pygame.** Only
   `game/human.py` may import pygame, lazily inside functions. `rl/vec_env.py`
   must stay torch-free (subprocess workers import it). `mario_play/__init__.py`
@@ -88,8 +116,8 @@ Training practice: [docs/training-guide.md](docs/training-guide.md).
   `@pytest.mark.slow`. Bug fixes land with a regression test.
 - Style: type hints and docstrings on public API, comments only for the
   non-obvious *why*, ruff-clean (`E,F,W,I,UP,B`, line length 100).
-- Docs: every command shown in README / docs must actually work; keep the
-  "no full training run yet" status honest until someone has done one.
+- Docs: every command shown in README / docs must actually work. Distinguish
+  measured pilot results from full-length training and evidence of convergence.
 - Training artefacts (`runs/`, `*.pt`, GIFs outside `docs/`) are git-ignored; do
   not commit them.
 

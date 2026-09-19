@@ -33,6 +33,10 @@ class EnvConfig:
     action_set: str = "simple"  # "right_only" | "simple" | "complex"
     frame_skip: int = 4
     frame_stack: int = 1  # 4 is the usual choice for pixels
+    jev_features_mode: str = "off"  # "off" | "zeros" | "table"; unstacked simple grid only
+    jev_features_path: str | None = None  # frozen local feature table, never an API endpoint
+    jev_features_sha256: str | None = None  # mandatory content digest for table mode
+    jev_features_interval: int = 1  # refresh at reset, then every N environment actions
     grayscale: bool = True  # pixels only
     resize: list[int] | None = field(default_factory=lambda: [84, 84])  # (H, W), pixels only
     stall_steps: int | None = None  # truncate after N env steps without progress
