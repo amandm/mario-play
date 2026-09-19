@@ -77,12 +77,28 @@ def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") 
 
     Returns a dict with `format_version`, `algo_name`, `algo_state`, `config`,
     `global_step`, `best_eval`, `rng_state` and `extra`. Raises `FileNotFoundError`
-    for a missing file and `ValueError` for a file that is not a (compatible) checkpoint.
+    for a missing file and `ValueError` for a file that is not a (compatible)
+    checkpoint. That covers everything the reader itself trips over - a corrupt,
+    truncated or foreign file, or a pickle that needs arbitrary objects, which
+    `weights_only` refuses to build: the message names the file and the reader's
+    exception is chained as `__cause__`. A file that cannot be opened keeps its
+    `PermissionError`.
     """
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"checkpoint not found: {path}")
-    payload = torch.load(path, map_location=map_location, weights_only=True)
+    try:
+        payload = torch.load(path, map_location=map_location, weights_only=True)
+    except (PermissionError, FileNotFoundError, MemoryError):
+        raise  # the file's content is not the problem
+    except Exception as exc:
+        # torch's readers fail in many ways on such files: RuntimeError (miniz), OSError,
+        # EOFError, KeyError, IndexError, UnpicklingError, ... depending on the bytes.
+        reason = str(exc).strip().split("\n", 1)[0][:200]
+        raise ValueError(
+            f"{path} is not a readable mario-play checkpoint (corrupt, truncated or a different "
+            f"kind of file): {type(exc).__name__}: {reason}"
+        ) from exc
     if not isinstance(payload, dict):
         raise ValueError(f"{path} is not a mario-play checkpoint (got {type(payload).__name__})")
     missing = [key for key in _REQUIRED_KEYS if key not in payload]

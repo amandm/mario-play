@@ -437,6 +437,44 @@ def test_evaluation_never_changes_the_training_trajectory(tiny_cfg):
 
 
 # --------------------------------------------------------------------------- #
+# schedules
+# --------------------------------------------------------------------------- #
+
+
+def test_lr_anneal_starts_at_the_configured_rate_and_the_last_update_still_learns(tiny_cfg):
+    """Update i of N runs at `lr * (1 - (i - 1) / N)` (the CleanRL schedule).
+
+    `progress` is the fraction completed when the update's rollout *began*: measured after
+    the rollout, the first update never saw the configured rate and the last one ran at 0.
+    """
+    cfg = tiny_cfg(total_timesteps=4 * 16 * 2, log_interval=16 * 2, eval={"interval": 0})
+    trainer = Trainer(cfg)
+    seen: list[float] = []
+    weights_before_last: dict[str, torch.Tensor] = {}
+    real_update = trainer.algo.update
+
+    def update(global_step: int, progress: float) -> dict[str, float]:
+        seen.append(progress)
+        if len(seen) == 4:
+            weights_before_last.update(
+                {key: value.clone() for key, value in model_tensors(trainer.algo).items()}
+            )
+        return real_update(global_step, progress)
+
+    trainer.algo.update = update
+    trainer.train()
+
+    assert seen == [0.0, 0.25, 0.5, 0.75]
+    rows = read_rows(trainer.run_dir)
+    rates = [float(row["train/lr"]) for row in rows if row["train/lr"]]
+    assert rates == pytest.approx([cfg.ppo.lr * left for left in (1.0, 0.75, 0.5, 0.25)])
+    after = model_tensors(trainer.algo)
+    assert any(not torch.equal(after[key], weights_before_last[key]) for key in after), (
+        "the final update must change the weights"
+    )
+
+
+# --------------------------------------------------------------------------- #
 # resume
 # --------------------------------------------------------------------------- #
 
@@ -575,12 +613,123 @@ def test_rewinding_to_an_older_checkpoint_sets_later_ones_aside(tiny_cfg):
     # Without setting ckpt_600..1000 aside, rotation would delete the new checkpoints instead.
     assert [p.name for p in list_checkpoints(ckpt_dir)] == ["ckpt_600.pt", "ckpt_800.pt"]
     assert load_checkpoint(ckpt_dir / "latest.pt")["global_step"] == 800
-    assert sorted(p.name for p in ckpt_dir.glob("*.superseded.pt")) == [
+    assert sorted(p.name for p in ckpt_dir.glob("ckpt_*.superseded.pt")) == [
         "ckpt_1000.superseded.pt",
         "ckpt_600.superseded.pt",
         "ckpt_800.superseded.pt",
     ]
+    assert load_checkpoint(ckpt_dir / "latest.superseded.pt")["global_step"] == 1_000
     assert steps_with(read_rows(second.run_dir), "time/sps") == [200, 400, 600, 800]
+
+
+def test_rewinding_makes_latest_follow_so_a_crash_cannot_jump_back_into_the_abandoned_future(
+    tiny_cfg,
+):
+    """`resume=<run_dir>` means `latest.pt`: after a rewind it must be the rewound state at once,
+    not only after the next periodic checkpoint (which a crash may never let happen)."""
+    cfg = tiny_cfg(checkpoint_interval=200, keep_checkpoints=10)
+    first = Trainer(cfg)
+    first.train()
+    ckpt_dir = first.run_dir / "checkpoints"
+    old_latest = (ckpt_dir / "latest.pt").read_bytes()
+
+    Trainer(cfg, resume=ckpt_dir / "ckpt_400.pt").close()  # dies before its first checkpoint
+    assert load_checkpoint(ckpt_dir / "latest.pt")["global_step"] == 400
+    assert (ckpt_dir / "latest.pt").read_bytes() == (ckpt_dir / "ckpt_400.pt").read_bytes()
+    assert (ckpt_dir / "latest.superseded.pt").read_bytes() == old_latest  # nothing is deleted
+    assert "latest.superseded.pt" in (first.run_dir / "log.txt").read_text(encoding="utf-8")
+
+    again = Trainer(cfg, resume=first.run_dir)
+    again.close()
+    assert again.global_step == 400
+    assert sorted(p.name for p in ckpt_dir.glob("latest*")) == ["latest.pt", "latest.superseded.pt"]
+
+    Trainer(cfg, resume=ckpt_dir / "ckpt_200.pt").close()  # a second rewind finds a free name
+    assert load_checkpoint(ckpt_dir / "latest.pt")["global_step"] == 200
+    assert load_checkpoint(ckpt_dir / "latest.superseded-2.pt")["global_step"] == 400
+    assert not [p for p in ckpt_dir.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_resuming_from_the_newest_checkpoint_sets_nothing_aside(tiny_cfg):
+    cfg = tiny_cfg(checkpoint_interval=200, keep_checkpoints=10)
+    first = Trainer(cfg)
+    first.train()
+    ckpt_dir = first.run_dir / "checkpoints"
+    before = sorted(p.name for p in ckpt_dir.iterdir())
+    for source in (ckpt_dir / "ckpt_1000.pt", ckpt_dir / "latest.pt", first.run_dir):
+        Trainer(cfg, resume=source).close()
+        assert sorted(p.name for p in ckpt_dir.iterdir()) == before
+
+
+def crash_after_periodic_work_at(trainer: Trainer, step: int) -> None:
+    """Make `train()` die like a killed process: right after the periodic work of `step`."""
+    real_periodic_work = trainer._periodic_work
+
+    def periodic_work(finished: bool) -> None:
+        real_periodic_work(finished)
+        if trainer.global_step >= step:
+            raise RuntimeError("killed")
+
+    trainer._periodic_work = periodic_work
+
+
+def test_crash_resume_does_not_replace_a_better_best_checkpoint_it_never_knew(
+    tiny_cfg, monkeypatch
+):
+    """best.pt from an evaluation after the last checkpoint is newer than `latest.pt`'s bar."""
+    cfg = tiny_cfg(eval={"interval": 200}, checkpoint_interval=400)
+    monkeypatch.setattr(trainer_module, "evaluate", scripted_evaluate([5.0, 6.0, 9.0]))
+    first = Trainer(cfg)
+    crash_after_periodic_work_at(first, 600)  # evaluated (9.0 -> best.pt) but not checkpointed
+    with pytest.raises(RuntimeError, match="killed"):
+        first.train()
+    ckpt_dir = first.run_dir / "checkpoints"
+    best_bytes = (ckpt_dir / "best.pt").read_bytes()
+    assert load_checkpoint(ckpt_dir / "best.pt")["best_eval"] == 9.0
+    assert load_checkpoint(ckpt_dir / "latest.pt")["best_eval"] == 6.0
+
+    monkeypatch.setattr(trainer_module, "evaluate", scripted_evaluate([7.0, 3.0, 4.0]))
+    second = Trainer(cfg, resume=first.run_dir)
+    assert (second.global_step, second.best_eval) == (400, 6.0)
+    result = second.train()
+
+    assert result["best_eval"] == 7.0  # a truthful "new best" of the resumed timeline ...
+    best = load_checkpoint(ckpt_dir / "best.pt")
+    assert (best["global_step"], best["best_eval"]) == (600, 7.0)
+    # ... that did not destroy the better policy of the timeline that was lost.
+    survivors = [p.name for p in ckpt_dir.glob("best*.pt") if p.read_bytes() == best_bytes]
+    assert survivors == ["best.superseded.pt"]
+    assert "best.superseded.pt" in (first.run_dir / "log.txt").read_text(encoding="utf-8")
+
+
+def test_rewinding_sets_the_best_checkpoint_of_the_abandoned_future_aside(tiny_cfg, monkeypatch):
+    monkeypatch.setattr(trainer_module, "evaluate", scripted_evaluate([5.0, 9.0, 7.0]))
+    first = Trainer(tiny_cfg(keep_checkpoints=10))
+    first.train()
+    ckpt_dir = first.run_dir / "checkpoints"
+    best_bytes = (ckpt_dir / "best.pt").read_bytes()
+    assert load_checkpoint(ckpt_dir / "best.pt")["global_step"] == 800
+
+    monkeypatch.setattr(trainer_module, "evaluate", scripted_evaluate([6.0]))
+    second = Trainer(tiny_cfg(total_timesteps=800), resume=ckpt_dir / "ckpt_400.pt")
+    assert second.best_eval == 5.0
+    assert second.train()["best_eval"] == 6.0
+    best = load_checkpoint(ckpt_dir / "best.pt")
+    assert (best["global_step"], best["best_eval"]) == (800, 6.0)
+    survivors = [p.name for p in ckpt_dir.glob("best*.pt") if p.read_bytes() == best_bytes]
+    assert survivors == ["best.superseded.pt"]
+
+
+def test_unreadable_best_or_latest_files_do_not_block_a_resume(tiny_cfg):
+    first = Trainer(tiny_cfg(total_timesteps=400, checkpoint_interval=200))
+    first.train()
+    ckpt_dir = first.run_dir / "checkpoints"
+    (ckpt_dir / "best.pt").write_bytes(b"truncated")
+    (ckpt_dir / "latest.pt").write_bytes(b"truncated")
+    resumed = Trainer(tiny_cfg(total_timesteps=600), resume=ckpt_dir / "ckpt_200.pt")
+    assert resumed.global_step == 200
+    assert resumed.train()["global_step"] == 600
+    assert load_checkpoint(ckpt_dir / "latest.pt")["global_step"] == 600
 
 
 def test_resume_rejects_a_checkpoint_of_another_algorithm(tiny_cfg):

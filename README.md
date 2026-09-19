@@ -224,7 +224,8 @@ uv run mario-play train --config configs/ppo_grid.yaml env.level=flat total_time
 # The real thing (5M steps; an hour or more on a recent laptop - size it with docs/training-guide.md):
 uv run mario-play train --config configs/ppo_grid.yaml run_name=ppo_grid_1-1
 
-# Any config field can be overridden with dotted key=value arguments:
+# Any config field can be overridden with dotted key=value arguments (values are YAML;
+# string fields keep their text, so run_name=2026-09-19 or run_name=007 name a run):
 uv run mario-play train --config configs/ppo_grid.yaml ppo.lr=1e-4 "env.level=[1-1,1-2]" device=cpu
 ```
 

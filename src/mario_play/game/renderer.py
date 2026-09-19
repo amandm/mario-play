@@ -264,11 +264,15 @@ class Renderer:
         self._hud_rgb = np.empty((HUD_HEIGHT, VIEW_W, 3), dtype=np.uint8)
         self._hud_mask = np.zeros((HUD_HEIGHT, VIEW_W, 1), dtype=bool)
 
-    def render(self, game: Game) -> np.ndarray:
+    def render(self, game: Game, *, blink: bool = True) -> np.ndarray:
         """Draw the current view of `game`; returns a new ``(240, 256, 3)`` uint8 RGB array.
 
         Works with any game at any time (clones, after `reset`, another level): the cached
         background is brought up to date first. The game is never modified.
+
+        `blink`: hide an invulnerable player in every other 4-frame window. Pass False for a
+        game that is held still (a pause), whose frozen counter would otherwise keep the
+        player hidden for as long as the freeze lasts.
         """
         self._sync_background(game.level)
         background = self._background
@@ -283,7 +287,7 @@ class Renderer:
                 walks = sprite is not _SHELL and sprite is not _MUSHROOM
                 _draw(frame, sprite, entity, cam, walks and entity.facing < 0)
         player = game.player
-        if (player.invuln_frames // _BLINK_PERIOD) % 2 == 0:
+        if not blink or (player.invuln_frames // _BLINK_PERIOD) % 2 == 0:
             _draw(frame, _player_sprite(player, tick), player, cam, player.facing < 0)
 
         if self.hud:

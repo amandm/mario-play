@@ -248,9 +248,10 @@ First knobs: `dqn.eps_decay_steps` (longer if it never finds the first jump),
 first choice here: it is cheaper per step and has fewer ways to go wrong.
 
 **When resuming with a larger `total_timesteps`,** remember that PPO's learning
-rate is `lr * (1 - global_step / total_timesteps)`: extending a finished run
-raises the learning rate again from ~0. That is usually what you want, but expect
-a visible kink in the curves. `ppo.anneal_lr=false` avoids it.
+rate is `lr * (1 - global_step / total_timesteps)` (with `global_step` taken at
+the start of each rollout): extending a finished run raises the learning rate
+again from ~0. That is usually what you want, but expect a visible kink in the
+curves. `ppo.anneal_lr=false` avoids it.
 
 ## 5. What to watch in TensorBoard
 
@@ -301,16 +302,21 @@ uv run mario-play eval --checkpoint runs/ppo_grid_1-1 --episodes 10 --stochastic
   `env.reward.death_penalty` (e.g. -5).
 - **KL spikes / performance collapses after looking good.** The classic PPO
   failure: lower `lr`, set `target_kl=0.03`, use more envs. Resume from an older
-  `ckpt_<step>.pt` rather than from `latest.pt` (later checkpoints are renamed to
-  `*.superseded.pt`, not deleted).
-- **Learning rate is ~0.** With `anneal_lr` the rate reaches 0 at
-  `total_timesteps`; the last 10% of a run learn little. Plan `total_timesteps`
-  generously or disable annealing.
+  `ckpt_<step>.pt` rather than from `latest.pt` (later checkpoints - numbered,
+  `best.pt` and `latest.pt` - are set aside as `*.superseded.pt`, not deleted;
+  `latest.pt` becomes the checkpoint you resumed from).
+- **Learning rate is ~0.** With `anneal_lr` the rate falls linearly towards 0 at
+  `total_timesteps` (the last update still runs at `lr / n_updates`); the last
+  10% of a run learn little. Plan `total_timesteps` generously or disable
+  annealing.
 - **"Evaluation never changes."** One greedy episode on a deterministic level is a
   single number that moves in jumps. Use `eval.deterministic=false eval.episodes=5`
   for a smoother signal, or train on several levels.
 - **`best.pt` is missing.** It is written by periodic evaluation; with
   `eval.interval=0` only the final evaluation can write it. Use `latest.pt`.
+  After a resume, look for `best.superseded.pt`: a `best.pt` from beyond the
+  resumed step is set aside, and a new one appears once the resumed run beats
+  the best score stored in the checkpoint it resumed from.
 - **MPS is slower than the CPU.** Small networks: force `device=cpu` (section 1).
 - **Subprocess envs are slower than sync.** Expected for the grid; use `sync`.
 - **DQN eats all RAM / the machine swaps.** `dqn.buffer_size=50000` halves the

@@ -3,7 +3,9 @@
 The dataclass tree below is the single source of truth for every tunable. YAML
 files mirror it one-to-one, unknown keys are rejected, and values are coerced to
 the annotated field type so that `lr: 1e-4` (a string in YAML 1.1) or
-`total_timesteps: 1e7` behave as expected.
+`total_timesteps: 1e7` behave as expected. `key=value` overrides of string fields
+keep their text (`run_name=2026-09-19`, `run_name=007`); in a YAML file such a
+value needs quotes, as anywhere in YAML.
 """
 
 from __future__ import annotations
@@ -199,7 +201,9 @@ def _coerce(value: Any, tp: Any, path: str) -> Any:
     if tp is str:
         if isinstance(value, str):
             return value
-        raise ValueError(f"{path}: expected a string, got {value!r}")
+        raise ValueError(
+            f"{path}: expected a string, got {value!r} (quote the value in YAML to make it one)"
+        )
 
     return value
 
@@ -233,11 +237,36 @@ def config_to_dict(cfg: TrainConfig) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
+def _accepts_str(tp: Any) -> bool:
+    """Whether a field annotated `tp` takes a plain string (`str`, `str | None`, `str | list`)."""
+    if tp is str:
+        return True
+    if typing.get_origin(tp) in (Union, types.UnionType):
+        return any(arg is str for arg in typing.get_args(tp))
+    return False
+
+
+def _field_type(keys: list[str]) -> Any:
+    """Annotation of the config field at the dotted path `keys`; None if it is not a field."""
+    tp: Any = TrainConfig
+    for key in keys:
+        if not dataclasses.is_dataclass(tp):
+            return None  # inside an untyped dict (`env.reward`, `env.kwargs`)
+        hints = typing.get_type_hints(tp)
+        if key not in hints:
+            return None  # unknown key: left to the strict check in `_from_dict`
+        tp = hints[key]
+    return tp
+
+
 def apply_overrides(data: dict[str, Any], overrides: list[str] | None) -> dict[str, Any]:
     """Apply `a.b.c=value` overrides to a nested dict and return it.
 
     Values are parsed as YAML (`env.level=[1-1,1-2]`, `ppo.target_kl=null`);
     numeric strings such as `1e-4` are later coerced by the dataclass field type.
+    A scalar for a string field keeps its text instead, so that `run_name=007`,
+    `run_name=2026-09-19` or `run_name=on` name a run rather than fail as an int,
+    a date or a bool (`null` / `~` still mean None). The result stays plain Python.
     """
     for item in overrides or []:
         if "=" not in item:
@@ -250,7 +279,14 @@ def apply_overrides(data: dict[str, Any], overrides: list[str] | None) -> dict[s
             if not isinstance(child, dict):
                 raise ValueError(f"override {item!r}: {key!r} is not a section")
             node = child
-        node[keys[-1]] = yaml.safe_load(raw)
+        value = yaml.safe_load(raw)
+        if (
+            value is not None
+            and not isinstance(value, (str, list, dict))
+            and _accepts_str(_field_type(keys))
+        ):
+            value = raw.strip()
+        node[keys[-1]] = value
     return data
 
 

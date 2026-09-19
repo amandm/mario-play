@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections
 import enum
+import os
 import pickle
 import random
 from pathlib import Path
@@ -281,9 +282,93 @@ def test_load_rejects_newer_format_versions(tmp_path) -> None:
 
 
 def test_load_never_unpickles_arbitrary_objects(tmp_path) -> None:
+    """The refusal of `weights_only` surfaces as the documented ValueError, cause attached."""
     torch.save({"global_step": 1, "payload": Path("x")}, tmp_path / "evil.pt")
-    with pytest.raises(pickle.UnpicklingError):
+    with pytest.raises(ValueError, match="evil.pt") as excinfo:
         load_checkpoint(tmp_path / "evil.pt")
+    assert isinstance(excinfo.value.__cause__, pickle.UnpicklingError)
+
+
+class _RunsCodeWhenUnpickled:
+    def __init__(self, marker: Path) -> None:
+        self.marker = marker
+
+    def __reduce__(self):
+        return (os.mkdir, (str(self.marker),))
+
+
+def test_load_never_executes_pickled_code(tmp_path) -> None:
+    marker = tmp_path / "executed"
+    path = tmp_path / "bomb.pt"
+    torch.save({"global_step": 1, "payload": _RunsCodeWhenUnpickled(marker)}, path)
+    with pytest.raises(ValueError, match="bomb.pt") as excinfo:
+        load_checkpoint(path)
+    assert isinstance(excinfo.value.__cause__, pickle.UnpicklingError)
+    assert not marker.exists()
+    # The file really is a bomb: an unrestricted load runs it.
+    torch.load(path, weights_only=False)
+    assert marker.is_dir()
+
+
+def _checkpoint_bytes(tmp_path: Path, size: str) -> bytes:
+    """A few hundred bytes of counters, or ~260 KB with a weight matrix (other zip layout)."""
+    state = {"n_updates": 1} if size == "small" else {"weights": torch.randn(256, 256)}
+    _save(tmp_path / "source.pt", algo_state=state)
+    return (tmp_path / "source.pt").read_bytes()
+
+
+def _not_a_checkpoint(kind: str, tmp_path: Path) -> bytes:
+    if kind == "empty":
+        return b""
+    if kind == "five-bytes":
+        return b"hello"
+    if kind == "yaml":
+        return b"algo: ppo\ntotal_timesteps: 1000\nenv:\n  id: MarioPlay-v0\n"
+    if kind == "csv":
+        return b"step,rollout/ep_return_mean,time/sps\n200,11.5,2600.0\n"
+    if kind == "random-bytes":
+        return np.random.default_rng(0).bytes(4096)
+    size, cut = kind.split("-", 1)  # a checkpoint whose copy (scp, rsync) was interrupted
+    data = _checkpoint_bytes(tmp_path, size)
+    return data[: len(data) // 2] if cut == "half" else data[:-100]
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "empty",
+        "five-bytes",
+        "yaml",
+        "csv",
+        "random-bytes",
+        "small-half",
+        "small-minus-100",
+        "larger-half",
+        "larger-minus-100",
+    ],
+)
+def test_corrupt_truncated_and_foreign_files_raise_value_error_naming_the_file(
+    tmp_path, kind: str
+) -> None:
+    """Whatever torch's reader trips over, callers see the one documented exception."""
+    path = tmp_path / "broken_latest.pt"
+    path.write_bytes(_not_a_checkpoint(kind, tmp_path))
+    with pytest.raises(ValueError, match="broken_latest.pt") as excinfo:
+        load_checkpoint(path)
+    assert excinfo.value.__cause__ is not None  # the reader's own error stays attached
+
+
+def test_a_checkpoint_that_cannot_be_opened_is_not_reported_as_corrupt(
+    tmp_path, monkeypatch
+) -> None:
+    _save(tmp_path / "c.pt")
+
+    def denied(*args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(checkpoint_module.torch, "load", denied)
+    with pytest.raises(PermissionError):
+        load_checkpoint(tmp_path / "c.pt")
 
 
 # --------------------------------------------------------------------------- #

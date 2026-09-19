@@ -216,9 +216,14 @@ class PlaySession:
             self.overlay_frames = OVERLAY_FRAMES
 
     def render(self) -> np.ndarray:
-        """The current picture, message included: a new ``(240, 256, 3)`` uint8 array."""
-        frame = self._renderer.render(self.game)
+        """The current picture, message included: a new ``(240, 256, 3)`` uint8 array.
+
+        Under a message the player is always drawn, invulnerable or not.
+        """
         message = self.message
+        # Under a message the game holds still, and so does the invulnerability blink: without
+        # this, a pause that starts in a hidden window shows a level with no player on it.
+        frame = self._renderer.render(self.game, blink=message is None)
         if message == PAUSE_TEXT:
             draw_overlay(frame, PAUSE_TEXT, subtitle=_PAUSE_HINT)
         elif message is not None:

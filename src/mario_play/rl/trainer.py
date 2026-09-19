@@ -21,6 +21,8 @@ Resuming restores the algorithm (weights, optimizer, counters), `global_step`,
 the best evaluation score and the global RNG streams, and appends to the logs of
 the run the checkpoint belongs to. Environments cannot be restored mid-episode:
 they start new episodes (seeded differently from the run's first ones).
+Checkpoints from beyond the resumed step - numbered ones, `best.pt`, `latest.pt` -
+are set aside as `*.superseded.pt`, and `latest.pt` becomes the resumed checkpoint.
 """
 
 from __future__ import annotations
@@ -119,6 +121,16 @@ def _claim_run_dir(base: Path, name: str) -> Path:
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+def _superseded_name(path: Path) -> Path:
+    """First free `<stem>.superseded.pt`, `<stem>.superseded-2.pt`, ... next to `path`."""
+    for attempt in itertools.count(1):
+        suffix = ".superseded" if attempt == 1 else f".superseded-{attempt}"
+        target = path.with_name(f"{path.stem}{suffix}.pt")
+        if not target.exists():
+            return target
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 class Trainer:
     """Trains `cfg.algo` on `cfg.env` and owns the run directory.
 
@@ -205,7 +217,7 @@ class Trainer:
                 resume_step=self.global_step if continues_run else None,
             )
             if continues_run:
-                self._set_aside_later_checkpoints()
+                self._set_aside_later_checkpoints(resume_path)
         except BaseException:
             self.close()
             raise
@@ -277,6 +289,10 @@ class Trainer:
             self._announce()
             self._train_started = self._window_started = time.perf_counter()
             start_step = self.global_step
+            # Schedules see the progress at which an update's data began to be collected (the
+            # CleanRL convention): the first update runs at the configured learning rate and the
+            # last one at lr / n_updates rather than at 0. A resume recollects its rollout.
+            update_start_step = self.global_step
             obs = self.venv.reset(seed=self._env_seed)
             while self.global_step < total and not self._stop_requested:
                 actions, extras = self.algo.select_actions(obs, self.global_step)
@@ -286,8 +302,9 @@ class Trainer:
                 self._window_steps += self.n_envs
                 self._record_episodes(step)
                 if self.algo.ready_to_update(self.global_step):
-                    progress = min(1.0, self.global_step / total)
+                    progress = min(1.0, update_start_step / total)
                     self._record_update(self.algo.update(self.global_step, progress))
+                    update_start_step = self.global_step
                 obs = step.obs
 
                 finished = self.global_step >= total
@@ -429,24 +446,66 @@ class Trainer:
         rotate_checkpoints(self.ckpt_dir, self.cfg.keep_checkpoints)
         self._last_ckpt_step = self.global_step
 
-    def _set_aside_later_checkpoints(self) -> None:
-        """Rename numbered checkpoints from beyond the resumed step (`*.superseded.pt`).
+    def _set_aside_later_checkpoints(self, resume_path: Path) -> None:
+        """Set aside checkpoints from beyond the resumed step as `*.superseded.pt`.
 
-        Resuming from an older checkpoint rewinds the run. Rotation keeps the
-        highest step numbers, so the abandoned future would otherwise outlive every
-        checkpoint written from here on. Nothing is deleted.
+        Resuming from an older checkpoint rewinds the run, and so does resuming
+        `latest.pt` after a crash as far as a `best.pt` written since is concerned.
+        Nothing from the abandoned future may pass for the resumed timeline, and
+        nothing is deleted:
+
+        * numbered checkpoints: rotation keeps the highest step numbers, so they
+          would outlive every checkpoint written from here on;
+        * `best.pt`: the restored `best_eval` predates it, so the next "new best"
+          would overwrite a policy that may well have scored higher;
+        * `latest.pt`: it is what `resume=<run_dir>` loads. It becomes a copy of the
+          resumed checkpoint right away - the next periodic checkpoint may never
+          happen - and the old one is kept (after Ctrl-C it exists nowhere else).
         """
         for path in list_checkpoints(self.ckpt_dir):
             step = int(path.stem.split("_")[1])
             if step <= self.global_step:
                 continue
-            for attempt in itertools.count(1):
-                suffix = ".superseded" if attempt == 1 else f".superseded-{attempt}"
-                target = path.with_name(f"{path.stem}{suffix}.pt")
-                if not target.exists():
-                    break
+            target = _superseded_name(path)
             path.rename(target)
             self.logger.print(f"resume rewinds the run: {path.name} set aside as {target.name}")
+
+        best = self.ckpt_dir / BEST
+        later = None if resume_path == best else self._payload_if_later(best)
+        if later is not None:
+            target = _superseded_name(best)
+            best.rename(target)
+            self.logger.print(
+                f"resume rewinds the run: {BEST} (step {later['global_step']:,}, eval return "
+                f"{_fmt(later['best_eval'])}) set aside as {target.name}"
+            )
+
+        latest = self.ckpt_dir / LATEST
+        later = None if resume_path == latest else self._payload_if_later(latest)
+        if later is not None:
+            target = _superseded_name(latest)
+            atomic_copy(latest, target)
+            atomic_copy(resume_path, latest)  # replaced in place: never a moment without one
+            self.logger.print(
+                f"resume rewinds the run: {LATEST} (step {later['global_step']:,}) set aside as "
+                f"{target.name}; {LATEST} is now step {self.global_step:,}"
+            )
+
+    def _payload_if_later(self, path: Path) -> dict[str, Any] | None:
+        """The checkpoint at `path` if it is from beyond the resumed step, else None.
+
+        A missing or unreadable file is left alone: a damaged side file must not
+        block a resume from a good checkpoint.
+        """
+        if not path.is_file():
+            return None
+        try:
+            payload = load_checkpoint(path, map_location="cpu")
+            payload["global_step"] = int(payload["global_step"])
+        except Exception as exc:
+            self.logger.print(f"resume: cannot read {path.name} ({type(exc).__name__}); left as is")
+            return None
+        return payload if payload["global_step"] > self.global_step else None
 
     # ------------------------------------------------------------------ #
     # statistics

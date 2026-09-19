@@ -253,7 +253,7 @@ Every learner implements [`rl/algos/base.py`](../src/mario_play/rl/algos/base.py
 | `select_actions(obs, global_step) -> (actions, extras)` | exploratory actions for a batch; `extras` carries what `observe` needs (PPO: log-probs and values) |
 | `observe(obs, actions, extras, step: VecStep)` | record the transitions (PPO: rollout buffer; DQN: replay buffer) |
 | `ready_to_update(global_step) -> bool` | PPO: the rollout is full. DQN: `global_step >= learning_starts`, replay is warm (it holds `min(learning_starts, buffer_size)` transitions - this only bites after a resume), and every `train_freq` vector steps |
-| `update(global_step, progress) -> dict[str, float]` | one learning update; `progress` in [0, 1] drives schedules (PPO's LR anneal) |
+| `update(global_step, progress) -> dict[str, float]` | one learning update; `progress` in [0, 1] - the fraction of training done when this update's data began to be collected - drives schedules (PPO's LR anneal) |
 | `predict(obs, deterministic=True) -> actions` | inference without side effects; all that evaluation uses |
 | `state_dict()` / `load_state_dict()` | models, optimizers, counters - tensors and plain Python values only |
 
@@ -274,13 +274,18 @@ sequenceDiagram
         T->>A: observe(obs, actions, extras, step)
         Note over T: global_step += n_envs, collect episode stats from step.infos
         opt algo.ready_to_update(global_step)
-            T->>A: update(global_step, progress = global_step / total)
+            T->>A: update(global_step, progress = update_start_step / total)
             A-->>T: metrics
         end
         Note over T: obs = step.obs, then log / evaluate / checkpoint if an interval was crossed
     end
 ```
 
+- `progress` is measured at the step where the data of an update began to be
+  collected (`update_start_step`: the step of the previous update, or of the
+  start / resume). PPO's update `i` of `N` therefore runs at
+  `lr * (1 - (i - 1) / N)`: the first one at the configured rate, the last one
+  at `lr / N` - never at exactly 0.
 - `global_step` counts env transitions summed over all envs and grows by `n_envs`
   per vector step. Intervals (`log_interval`, `eval.interval`,
   `checkpoint_interval`) are rarely hit exactly, so each kind of work fires on the
@@ -336,6 +341,10 @@ pickled code**. `save_checkpoint` validates the payload before touching the disk
 (a value `weights_only` would refuse raises `TypeError` naming its location) and
 writes atomically (temp file, fsync, rename). `ckpt_<step>.pt` files are rotated
 down to `keep_checkpoints`; `latest.pt` and `best.pt` are never rotated away.
+`load_checkpoint` raises `FileNotFoundError` for a missing file and `ValueError`
+(naming the file, with the reader's own exception chained) for anything that is
+not a readable checkpoint: a corrupt, truncated or foreign file, or a pickle that
+needs arbitrary objects.
 
 **Resume guarantees.** `Trainer(cfg, resume=path)` (CLI: `train --resume`) restores
 the algorithm (weights, optimizer moments, update counters), `global_step` - and
@@ -347,7 +356,12 @@ checkpoint file starts a new run directory. The passed config stays authoritativ
 (raise `total_timesteps` to train longer, change `dqn.lr`, ...); without one the
 stored config is used. The algorithm must match the checkpoint's. Resuming from
 an older numbered checkpoint renames the later ones to `*.superseded.pt` - nothing
-is deleted.
+is deleted. The same holds for a `best.pt` and a `latest.pt` from beyond the
+resumed step: `best.pt` is renamed (after a crash it can be newer than
+`latest.pt`, whose stored best score would otherwise let a worse "new best"
+overwrite it), and `latest.pt` is kept as `latest.superseded.pt` while a copy of
+the resumed checkpoint takes its place at once, so `--resume <run_dir>` never
+jumps back into the abandoned timeline.
 
 **Resume limits.**
 
@@ -392,7 +406,8 @@ is deleted.
 
    The search agent reaching the flag is the completability proof. Design rules
    the bundled levels follow: no corridor that needs a 1-tile-high gap (there is
-   no crouch), pits at most 4 tiles wide, room to run up before wide pits.
+   no crouch), pits at most 4 tiles wide, room to run up before wide pits, nothing
+   in the two top tile rows (the HUD is written over them).
 3. To bundle it, drop the file into `src/mario_play/levels/` (every `*.txt` there
    is listed by `list_levels()`), add its name to the expected list in
    `tests/game/test_level.py` and to the completability tests in

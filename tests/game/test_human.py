@@ -555,6 +555,54 @@ def test_pause_also_holds_the_end_of_run_overlay():
     assert session.message == "TRY AGAIN"
 
 
+def _render_at_every_invuln(session: PlaySession) -> list[np.ndarray]:
+    """`session.render()` for every value the invulnerability counter can have (1..120)."""
+    frames = []
+    for invuln in range(1, 121):
+        session.game.player.invuln_frames = invuln
+        frames.append(session.render())
+    return frames
+
+
+def test_the_player_never_blinks_away_under_the_pause_message():
+    # Regression: pausing freezes `invuln_frames`, so a pause that began in a hidden window of
+    # the invulnerability blink showed a level without a player until the game was resumed.
+    session = PlaySession("flat")
+    for _ in range(10):
+        session.update(RIGHT)
+    session.update(IDLE, pause=True)
+    steady = session.render()
+    assert session.game.player.invuln_frames == 0
+
+    for invuln, frame in enumerate(_render_at_every_invuln(session), start=1):
+        assert np.array_equal(frame, steady), f"player hidden while paused at invuln={invuln}"
+    assert session.game.player.invuln_frames == 120, "rendering must not use up invulnerability"
+
+
+def test_the_player_never_blinks_away_under_the_end_of_run_message():
+    session = PlaySession(Level.from_string(WIN_LEVEL, name="tiny"))
+    for _ in range(120):
+        session.update(RIGHT)
+        if session.game.over:
+            break
+    assert session.message == "COURSE CLEAR"
+    steady = session.render()
+
+    for invuln, frame in enumerate(_render_at_every_invuln(session), start=1):
+        assert np.array_equal(frame, steady), f"player hidden under the message at invuln={invuln}"
+
+
+def test_the_player_still_blinks_during_play():
+    session = PlaySession("flat")
+    session.update(IDLE)
+    steady = session.render()
+
+    hidden = [not np.array_equal(f, steady) for f in _render_at_every_invuln(session)]
+
+    assert 56 <= sum(hidden) <= 64, "hidden in every other 4-frame window"
+    assert np.array_equal(session.render(), Renderer().render(session.game))
+
+
 def test_restart_also_resumes_a_paused_session():
     session = PlaySession("flat")
     for _ in range(10):

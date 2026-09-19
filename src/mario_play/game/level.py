@@ -2,9 +2,10 @@
 
 A level is text with one character per tile (see `LEGEND`). Lines starting with
 `;` are comments; a comment of the exact form `; key=value` is metadata (only
-`time` is known). Blank lines before the first and after the last row are
-ignored - write `.` to make an explicitly empty row. Levels with fewer than 15
-rows are padded with empty rows on top, and rows are right-padded to the longest.
+`time` is known). Empty lines before the first and after the last row are
+ignored; a line of spaces is not empty but a row of empty tiles, exactly like a
+row of `.`. Levels with fewer than 15 rows are padded with empty rows on top, and
+rows are right-padded to the longest.
 """
 
 from __future__ import annotations
@@ -99,11 +100,14 @@ class Level:
             if raw.lstrip().startswith(";"):
                 time = _parse_metadata(raw.strip(), line_no, time)
             else:
-                rows.append((line_no, raw.rstrip()))
+                rows.append((line_no, raw))
+        # Only truly empty lines are blank: a line of spaces is a row of empty tiles, and
+        # dropping it would shift a 15-row level down by one row without a word.
         while rows and not rows[0][1]:
             rows.pop(0)
         while rows and not rows[-1][1]:
             rows.pop()
+        rows = [(line_no, raw.rstrip()) for line_no, raw in rows]
 
         if not rows:
             raise ValueError(f"level {name!r} has no tile rows")

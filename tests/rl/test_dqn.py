@@ -548,6 +548,33 @@ def test_update_works_on_uint8_image_observations():
     assert algo.buffer.obs.dtype == np.uint8
 
 
+FLOAT64_SPACE = gym.spaces.Box(-1.0, 1.0, (4,), np.float64)
+
+
+def test_float64_observations_become_float32_tensors():
+    """MPS has no float64: the acting path narrows just like the replay buffer does."""
+    algo = make_algo(space=FLOAT64_SPACE, eps_start=0.0, eps_end=0.0)
+    obs = np.random.default_rng(0).standard_normal((2, 4))
+    assert obs.dtype == np.float64
+    assert algo.obs_to_tensor(obs).dtype == torch.float32
+    assert algo.obs_to_tensor(obs.astype(np.float32)).dtype == torch.float32
+    assert algo.buffer.obs.dtype == np.float32
+    assert algo.select_actions(obs, 0)[0].shape == (2,)
+    assert algo.predict(obs).shape == (2,)
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs an MPS device")
+def test_float64_observation_space_acts_and_learns_on_mps():
+    torch.manual_seed(0)
+    cfg = make_cfg(eps_start=0.0, eps_end=0.0)
+    algo = DQN(FLOAT64_SPACE, gym.spaces.Discrete(3), cfg, torch.device("mps"), 2)
+    obs = np.random.default_rng(0).standard_normal((2, 4))
+    actions, _ = algo.select_actions(obs, 0)  # epsilon 0: the greedy forward pass runs
+    assert actions.shape == (2,) and algo.predict(obs).shape == (2,)
+    global_step = fill(algo, 8)
+    assert math.isfinite(algo.update(global_step, 0.0)["loss"])
+
+
 # --------------------------------------------------------------------------- #
 # checkpoints
 # --------------------------------------------------------------------------- #

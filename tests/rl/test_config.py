@@ -66,6 +66,62 @@ def test_overrides_are_typed():
     assert cfg.env.reward == {"flag_bonus": 100}
 
 
+@pytest.mark.parametrize(
+    ("override", "field", "expected"),
+    [
+        ("run_name=007", "run_name", "007"),
+        ("run_name=2026-09-19", "run_name", "2026-09-19"),
+        ("run_name=1.0", "run_name", "1.0"),
+        ("run_name=on", "run_name", "on"),
+        ("run_name= 42 ", "run_name", "42"),
+        ("run_dir=2026", "run_dir", "2026"),
+        ("run_name=smoke", "run_name", "smoke"),
+        ("run_name='007'", "run_name", "007"),
+        ("run_name=null", "run_name", None),
+        ("run_name=~", "run_name", None),
+    ],
+)
+def test_overrides_of_string_fields_keep_their_text(override, field, expected):
+    """`run_name=2026-09-19` names a run; YAML's date / int / bool reading must not reject it."""
+    assert getattr(load_config(None, [override]), field) == expected
+
+
+def test_string_overrides_in_nested_sections_keep_their_text():
+    cfg = load_config(None, ["env.id=123", "env.level=1", "network.encoder=off"])
+    assert (cfg.env.id, cfg.env.level, cfg.network.encoder) == ("123", "1", "off")
+    assert load_config(None, ["env.level=[1-1,1-2]"]).env.level == ["1-1", "1-2"]
+
+
+def test_only_string_fields_keep_the_override_text():
+    """Everything else stays YAML-typed: numbers, bools and the untyped reward / kwargs dicts."""
+    data = apply_overrides(
+        {},
+        [
+            "env.reward.flag_bonus=100",
+            "env.kwargs.continuous=on",
+            "n_envs=4",
+            "ppo.anneal_lr=false",
+            "ppo.target_kl=0.02",
+            "env.stall_steps=null",
+            "nope=007",
+        ],
+    )
+    assert data == {
+        "env": {"reward": {"flag_bonus": 100}, "kwargs": {"continuous": True}, "stall_steps": None},
+        "n_envs": 4,
+        "ppo": {"anneal_lr": False, "target_kl": 0.02},
+        "nope": 7,
+    }
+    with pytest.raises(ValueError, match="unknown config key"):
+        config_from_dict(data)
+
+
+def test_a_yaml_file_still_needs_quotes_for_a_numeric_string():
+    """Only the command line is lenient: in a file, `run_name: 7` is an int, as in any YAML."""
+    with pytest.raises(ValueError, match="run_name"):
+        config_from_dict({"run_name": 7})
+
+
 def test_level_accepts_a_list():
     cfg = config_from_dict({"env": {"level": ["1-1", "1-2"]}})
     assert cfg.env.level == ["1-1", "1-2"]

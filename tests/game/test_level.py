@@ -109,6 +109,32 @@ def test_exactly_15_rows_is_accepted() -> None:
     assert level.player_start == (0, 13)
 
 
+def test_an_all_space_bottom_row_is_a_row_of_empty_tiles() -> None:
+    # Regression: the space row used to be dropped as "blank", which made this a 14-row level
+    # that was padded on top, so everything silently ended up one row lower than written.
+    rows = ["." * 16] * 12 + ["S..........F....", "################", " " * 16]
+
+    level = Level.from_string(minimal(rows))
+
+    assert level.player_start == (0, 12)
+    assert (level.tiles[13] == Tile.GROUND).all()
+    assert (level.tiles[14] == Tile.EMPTY).all()
+
+
+@pytest.mark.parametrize("spaces", [" ", " " * 16])
+@pytest.mark.parametrize("where", ["top", "bottom"])
+def test_a_row_of_spaces_parses_like_a_row_of_dots(where: str, spaces: str) -> None:
+    body = ["S..........F....", "################"]
+    with_spaces = [spaces, *body] if where == "top" else [*body, spaces]
+    with_dots = ["." * 16, *body] if where == "top" else [*body, "." * 16]
+
+    level = Level.from_string(minimal(with_spaces))
+    expected = Level.from_string(minimal(with_dots))
+
+    assert level.player_start == expected.player_start
+    assert np.array_equal(level.tiles, expected.tiles)
+
+
 # --- parsing errors --------------------------------------------------------------------
 
 
@@ -141,6 +167,15 @@ def test_unknown_char_reports_line_and_column() -> None:
 
 def test_more_than_15_rows_raises() -> None:
     rows = ["." * 16] * 14 + ["S..........F....", "################"]
+
+    with pytest.raises(ValueError, match="16 rows"):
+        Level.from_string(minimal(rows))
+
+
+@pytest.mark.parametrize("where", ["top", "bottom"])
+def test_a_row_of_spaces_counts_towards_the_15_row_limit(where: str) -> None:
+    rows = ["." * 16] * 13 + ["S..........F....", "################"]
+    rows = [" " * 16, *rows] if where == "top" else [*rows, " " * 16]
 
     with pytest.raises(ValueError, match="16 rows"):
         Level.from_string(minimal(rows))
@@ -324,6 +359,15 @@ def test_flag_stands_on_the_ground_with_room_after_it(name: str) -> None:
     pole_rows = [r for r in range(LEVEL_H_TILES) if level.tiles[r, col] != Tile.EMPTY]
     assert level.tiles[pole_rows[0], col] == Tile.FLAG_TOP
     assert pole_rows[0] <= 3
+
+
+@pytest.mark.parametrize("name", BUNDLED)
+def test_the_rows_under_the_hud_are_empty(name: str) -> None:
+    # The HUD is written over the top 28 px = tile rows 0 and 1. Regression: the flag top of
+    # 1-3 stood in row 1, where its ball ended up behind the digits of the HUD values.
+    level = load_level(name)
+
+    assert (level.tiles[:2] == Tile.EMPTY).all()
 
 
 @pytest.mark.parametrize("name", ["1-1", "1-2", "1-3"])

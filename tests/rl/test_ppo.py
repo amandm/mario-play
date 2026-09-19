@@ -847,6 +847,43 @@ def test_full_cycle_on_image_like_observations(space: gym.spaces.Box):
     assert actions.shape == (3,) and 0 <= actions.min() and actions.max() < 7
 
 
+FLOAT64_SPACE = gym.spaces.Box(-1.0, 1.0, (4,), np.float64)
+
+
+def test_float64_observations_become_float32_tensors():
+    """MPS has no float64: the acting path narrows just like the rollout buffer does."""
+    algo = make_algo(obs_space=FLOAT64_SPACE, n_steps=4, n_epochs=1)
+    obs = random_obs(np.random.default_rng(0), 2, FLOAT64_SPACE)
+    assert obs.dtype == np.float64
+    assert algo.obs_to_tensor(obs).dtype == torch.float32
+    assert algo.obs_to_tensor(obs.astype(np.float32)).dtype == torch.float32
+    metrics = rollout_and_update(algo, seed=0)
+    assert algo.buffer.obs.dtype == torch.float32
+    assert all(math.isfinite(value) for value in metrics.values())
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs an MPS device")
+def test_float64_observation_space_acts_and_learns_on_mps():
+    mps = torch.device("mps")
+    cfg = TrainConfig(
+        algo="ppo",
+        n_envs=2,
+        network=NetworkConfig(hidden_size=32, mlp_hidden=[32, 32]),
+        ppo=PPOConfig(n_steps=4, n_epochs=1, n_minibatches=2),
+    )
+    algo = PPO(FLOAT64_SPACE, TWO_ACTIONS, cfg, mps, 2)
+    rng = np.random.default_rng(0)
+    obs = random_obs(rng, 2, FLOAT64_SPACE)
+    for _ in range(4):
+        actions, extras = algo.select_actions(obs, 0)
+        step = random_vec_step(rng, 2, FLOAT64_SPACE)
+        step.truncated[0], step.terminated[0] = True, False  # exercises the bootstrap forward
+        algo.observe(obs, actions, extras, step)
+        obs = step.obs
+    assert math.isfinite(algo.update(8, 0.0)["loss"])
+    assert algo.predict(obs).shape == (2,)
+
+
 # --------------------------------------------------------------------------- #
 # learning sanity (fast, CPU)
 # --------------------------------------------------------------------------- #

@@ -602,6 +602,21 @@ def test_player_blinks_in_four_frame_windows_while_invulnerable() -> None:
     assert np.array_equal(renderer.render(game), shown)
 
 
+def test_blink_can_be_switched_off_for_a_game_that_is_held_still() -> None:
+    # Regression: a frozen game (pause, end-of-run message) keeps its invuln counter, so half
+    # of the time every frame of the freeze was drawn without the player.
+    game = make_game()
+    renderer = plain()
+    shown = expected_frame(game, [("player_small_stand", game.player, False)])
+    for invuln in range(0, 121):
+        game.player.invuln_frames = invuln
+        assert np.array_equal(renderer.render(game, blink=False), shown), invuln
+    assert game.player.invuln_frames == 120, "rendering never touches the game"
+    game.player.invuln_frames = 4  # a hidden window
+    assert not np.array_equal(renderer.render(game), shown), "blinking stays the default"
+    assert not np.array_equal(renderer.render(game, blink=True), shown)
+
+
 def test_walker_sprites_anchor_animate_and_flatten() -> None:
     game = make_game()
     walker = Walker(100.0, float(FLOOR_Y - 14))
@@ -752,6 +767,14 @@ def test_dead_and_finished_games_still_render() -> None:
 def test_without_hud_the_top_rows_are_sky(level: str) -> None:
     frame = Renderer(hud=False).render(Game(level))
     assert (frame[:HUD_HEIGHT] == SKY).all()
+
+
+@pytest.mark.parametrize("level", list_levels())
+def test_no_bundled_level_draws_anything_behind_the_hud(level: str) -> None:
+    # Regression: the flag top of 1-3 stood in tile row 1, inside the HUD band, so at the end
+    # of the level its ball sat right behind the digits of the HUD values.
+    scene = panorama(Renderer(hud=False), Game(level))
+    assert (scene[:HUD_HEIGHT] == SKY).all()
 
 
 def test_hud_draws_only_inside_its_band() -> None:
