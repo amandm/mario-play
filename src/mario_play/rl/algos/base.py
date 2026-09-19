@@ -89,7 +89,7 @@ class Algorithm(ABC):
 
     @abstractmethod
     def predict(self, obs: np.ndarray, deterministic: bool = True) -> np.ndarray:
-        """Evaluation-time actions for a batch `(n, *obs_shape)` -> int64 `(n,)`. Side-effect free."""
+        """Greedy/sampled actions for a batch `(n, *obs_shape)` -> int64 `(n,)`; no side effects."""
 
     @abstractmethod
     def state_dict(self) -> dict[str, Any]:
