@@ -1,0 +1,44 @@
+# Double DQN on CartPole-v1: the algorithm-correctness check of the RL framework.
+#
+#   mario-play train --config configs/dqn_cartpole.yaml
+#
+# Reaches a mean evaluation return >= 150 (usually far more) within the 100k steps
+# below; tests/rl/test_cartpole_slow.py asserts it on the best periodic evaluation.
+# device is cpu on purpose: for a 64x64 MLP, per-call overhead makes MPS/CUDA slower.
+algo: dqn
+total_timesteps: 100000
+n_envs: 4
+vec_env: sync
+seed: 1
+device: cpu
+log_interval: 10000
+checkpoint_interval: 50000
+
+env:
+  id: CartPole-v1
+
+network:
+  encoder: mlp
+  mlp_hidden: [64, 64]
+
+dqn:
+  lr: 1.0e-3
+  buffer_size: 50000
+  learning_starts: 1000
+  batch_size: 64
+  gamma: 0.99
+  train_freq: 1          # one update per vector step = every 4 env transitions
+  gradient_steps: 1
+  target_update_interval: 500   # unused while tau < 1
+  tau: 0.01                     # Polyak target updates: far steadier here than hard syncs
+  eps_start: 1.0
+  eps_end: 0.02
+  eps_decay_steps: 10000
+  double_q: true
+  dueling: false
+  max_grad_norm: 10.0
+
+eval:
+  interval: 5000
+  episodes: 20
+  deterministic: true

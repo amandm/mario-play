@@ -1,0 +1,41 @@
+# PPO on CartPole-v1: the algorithm-correctness check of the RL framework.
+#
+#   mario-play train --config configs/ppo_cartpole.yaml
+#
+# Solves the task (mean evaluation return >= 195, usually the maximum of 500) well
+# within the 100k steps below; tests/rl/test_cartpole_slow.py asserts it.
+# device is cpu on purpose: for a 64x64 MLP, per-call overhead makes MPS/CUDA slower.
+algo: ppo
+total_timesteps: 100000
+n_envs: 8
+vec_env: sync
+seed: 1
+device: cpu
+log_interval: 10000
+checkpoint_interval: 50000
+
+env:
+  id: CartPole-v1
+
+network:
+  encoder: mlp
+  mlp_hidden: [64, 64]
+
+ppo:
+  lr: 1.0e-3
+  anneal_lr: true
+  n_steps: 64
+  n_epochs: 8
+  n_minibatches: 4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+
+eval:
+  interval: 10000
+  episodes: 20
+  deterministic: true
