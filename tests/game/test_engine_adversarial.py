@@ -115,7 +115,7 @@ def step_until(game: Game, buttons: Buttons, condition, limit: int = 600) -> Ste
 
 
 def place(game: Game, x: float, bottom: float = FLOOR_Y, vx: float = 0.0, vy: float = 0.0) -> None:
-    """Teleport the player: left edge at `x`, feet at `bottom`; airborne unless standing still."""
+    """Teleport the player: left edge at `x`, feet at `bottom`, airborne until the next frame."""
     p = game.player
     p.x, p.y, p.vx, p.vy = float(x), float(bottom - p.h), float(vx), float(vy)
     p.on_ground = False
@@ -358,7 +358,9 @@ class Invariants:
                 assert type(value) is float and math.isfinite(value), (context, e, name)
             assert e.alive, (context, "dead entity kept", e)
             assert 0.0 <= e.x <= level.width_px - e.w, (context, e)
-            assert e.y <= LEVEL_H_PX, (context, "below the level but still there", e)
+            # A turtle stomped at the very bottom shrinks to a shell whose top is 8 px lower.
+            lowest = LEVEL_H_PX + (TURTLE_H - SHELL_H if isinstance(e, Turtle) else 0)
+            assert e.y <= lowest, (context, "below the level but still there", e)
             assert 0.0 <= e.vy <= MAX_FALL, (context, e)
             assert e.facing in (-1, 1), (context, e)
             assert not solid_cells(game, e), (context, "entity in solid", solid_cells(game, e), e)
@@ -412,7 +414,10 @@ class Invariants:
         harmed = events.hurt or (events.died and events.death_cause == "enemy")
         if harmed:
             assert was_invuln == 0 and not events.stomps, (context, events)
-            body = Entity(p.x, feet - PLAYER_BIG_H, p.w, PLAYER_BIG_H) if events.hurt else p
+            # The big hitbox is gone by now; rebuilding it from the feet is off by float rounding.
+            slack = 1e-9
+            body = Entity(p.x, feet - PLAYER_BIG_H - slack, p.w, PLAYER_BIG_H + slack)
+            body = body if events.hurt else p
             culprits = [e for e in self.entities if _overlap(body, e) and _dangerous(e, p)]
             assert culprits, (context, "hurt by nothing", events, p)
             if moving_down:
@@ -980,6 +985,20 @@ def test_stomping_works_while_invulnerable_and_side_hits_do_not() -> None:
     place(game, 101.0, bottom=WALKER_Y - 1.0, vy=1.0)
     events = step_until(game, NOOP, lambda e: e.stomps or e.died, limit=5)
     assert events.stomps == 1 and walker.squished_frames == SQUISH_FRAMES
+
+
+def test_hurt_and_pit_death_can_share_a_frame() -> None:
+    """Found by the fuzzer: shrinking deep inside a pit drops the head below the level."""
+    game = make_game(pits=((10, 12),))
+    p = game.player
+    p.grow()
+    place(game, 11 * TILE + 2.0, bottom=LEVEL_H_PX + 21.0, vy=0.5)  # head at y=232 after the move
+    game.entities.append(still(Walker(11 * TILE + 1.0, LEVEL_H_PX - 4.0)))
+
+    (events,) = run_checked(game, [NOOP])
+
+    assert events.hurt and events.died and events.death_cause == "pit"
+    assert not p.big and p.y > LEVEL_H_PX and game.over and not game.won
 
 
 def test_invulnerability_protects_for_exactly_120_frames_inside_an_enemy() -> None:
